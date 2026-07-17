@@ -1,0 +1,10 @@
+# Dependencias del worker de visión (vision_worker.py).
+# Se instalan aparte porque son pesadas y no todos los servicios las necesitan.
+ultralytics>=8.3.0
+opencv-python>=4.10.0
+numpy>=1.26.0
+
+# Acceso a la base de datos / configuración (compartidas con el backend).
+SQLAlchemy>=2.0.34
+psycopg2-binary>=2.9.10
+python-dotenv>=1.0.0
