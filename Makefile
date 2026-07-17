@@ -1,4 +1,4 @@
-.PHONY: up up-docker down local install-backend install-frontend
+.PHONY: up up-docker down local create-tables vision install-backend install-frontend install-vision
 
 up:
 	@echo "Iniciando backend y frontend localmente..."
@@ -14,8 +14,17 @@ down:
 local:
 	python3 local_worker.py
 
+vision:
+	python3 vision_worker.py
+
+create-tables:
+	python3 -m backend.app.create_tables
+
 install-backend:
 	python3 -m pip install -r backend/requirements.txt
 
 install-frontend:
 	cd frontend && npm install
+
+install-vision:
+	python3 -m pip install -r requirements-vision.txt
