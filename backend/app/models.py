@@ -9,6 +9,9 @@ Estructura general:
     TIPO_EVENTO -> EVENTO
 """
 import enum
+import secrets
+import time
+import uuid
 from datetime import datetime
 
 from sqlalchemy import (
@@ -20,10 +23,34 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Uuid,
 )
 from sqlalchemy.orm import relationship
 
 from .database import Base
+
+
+def uuid7() -> uuid.UUID:
+    """Genera un UUID versión 7 (RFC 9562).
+
+    Es ordenado por tiempo (los ids son "consecutivos" y conservan la
+    localidad del índice) pero incluye 74 bits aleatorios, por lo que no
+    es enumerable como un 1, 2, 3.
+    """
+    unix_ts_ms = time.time_ns() // 1_000_000
+    rand_a = secrets.randbits(12)
+    rand_b = secrets.randbits(62)
+    value = (unix_ts_ms & ((1 << 48) - 1)) << 80
+    value |= 0x7 << 76  # versión 7
+    value |= rand_a << 64
+    value |= 0b10 << 62  # variante RFC 4122
+    value |= rand_b
+    return uuid.UUID(int=value)
+
+
+def _pk() -> Column:
+    """Columna de clave primaria UUIDv7 reutilizable."""
+    return Column(Uuid, primary_key=True, default=uuid7)
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +88,7 @@ class DireccionTelegrama(str, enum.Enum):
 class Planta(Base):
     __tablename__ = "plantas"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     codigo = Column(String(32), unique=True, nullable=False, index=True)
     nombre = Column(String(128), nullable=False)
     direccion = Column(String(255), nullable=True)
@@ -78,9 +105,9 @@ class Planta(Base):
 class Area(Base):
     __tablename__ = "areas"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     planta_id = Column(
-        Integer, ForeignKey("plantas.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid, ForeignKey("plantas.id", ondelete="CASCADE"), nullable=False, index=True
     )
     codigo = Column(String(32), nullable=False, index=True)
     nombre = Column(String(128), nullable=False)
@@ -98,9 +125,9 @@ class Area(Base):
 class Transportador(Base):
     __tablename__ = "transportadores"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     area_id = Column(
-        Integer, ForeignKey("areas.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid, ForeignKey("areas.id", ondelete="CASCADE"), nullable=False, index=True
     )
     codigo = Column(String(32), nullable=False, index=True)
     nombre = Column(String(128), nullable=False)
@@ -144,15 +171,15 @@ class Transportador(Base):
 class Conexion(Base):
     __tablename__ = "conexiones"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     transportador_origen_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("transportadores.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     transportador_destino_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("transportadores.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -179,7 +206,7 @@ class Conexion(Base):
 class Controlador(Base):
     __tablename__ = "controladores"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     codigo = Column(String(32), unique=True, nullable=False, index=True)
     nombre = Column(String(128), nullable=False)
     tipo = Column(String(64), nullable=True)
@@ -202,15 +229,15 @@ class Controlador(Base):
 class ControladorTransportador(Base):
     __tablename__ = "controlador_transportador"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     controlador_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("controladores.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     transportador_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("transportadores.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -227,9 +254,9 @@ class ControladorTransportador(Base):
 class Dispositivo(Base):
     __tablename__ = "dispositivos"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     transportador_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("transportadores.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -250,7 +277,7 @@ class Dispositivo(Base):
 class Objeto(Base):
     __tablename__ = "objetos"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     codigo = Column(String(64), unique=True, nullable=False, index=True)
     tipo = Column(Enum(TipoObjeto), nullable=True)
     estado = Column(String(64), nullable=True)
@@ -268,12 +295,12 @@ class Objeto(Base):
 class Posicion(Base):
     __tablename__ = "posiciones"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     objeto_id = Column(
-        Integer, ForeignKey("objetos.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid, ForeignKey("objetos.id", ondelete="CASCADE"), nullable=False, index=True
     )
     transportador_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("transportadores.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
@@ -295,15 +322,15 @@ class Posicion(Base):
 class Telegrama(Base):
     __tablename__ = "telegramas"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     controlador_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("controladores.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
     transportador_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("transportadores.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
@@ -325,7 +352,7 @@ class Telegrama(Base):
 class TipoEvento(Base):
     __tablename__ = "tipos_evento"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     codigo = Column(String(32), unique=True, nullable=False, index=True)
     nombre = Column(String(128), nullable=False)
     descripcion = Column(Text, nullable=True)
@@ -339,31 +366,31 @@ class TipoEvento(Base):
 class Evento(Base):
     __tablename__ = "eventos"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = _pk()
     tipo_evento_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("tipos_evento.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
     fecha_hora = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     transportador_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("transportadores.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
     dispositivo_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("dispositivos.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
     objeto_id = Column(
-        Integer, ForeignKey("objetos.id", ondelete="SET NULL"), nullable=True, index=True
+        Uuid, ForeignKey("objetos.id", ondelete="SET NULL"), nullable=True, index=True
     )
     telegrama_id = Column(
-        Integer,
+        Uuid,
         ForeignKey("telegramas.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
