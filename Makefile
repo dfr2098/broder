@@ -1,17 +1,31 @@
-.PHONY: up up-docker down local install-backend install-frontend
+.PHONY: up up-docker down infra apps cluster-up cluster-down local run-worker install-backend install-frontend
 
 up:
-	@echo "Iniciando backend y frontend localmente..."
-	@cd backend && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload & \
-	cd frontend && npm install && npm run dev -- --host 0.0.0.0 --port 3000
+	@echo "Iniciando infraestructura y servicios de aplicación..."
+	docker compose up -d --build
+
+infra:
+	docker compose -f docker-compose.infra.yml up -d
+
+apps:
+	docker compose -f docker-compose.infra.yml -f docker-compose.apps.yml up -d --build
+
+cluster-up:
+	docker compose up -d --build
+
+cluster-down:
+	docker compose down -v
 
 up-docker:
-	docker compose --profile app up --build
+	docker compose up -d --build
 
 down:
-	docker compose --profile app --profile db --profile cache down
+	docker compose down -v
 
 local:
+	python3 local_worker.py
+
+run-worker:
 	python3 local_worker.py
 
 install-backend:

@@ -1,0 +1,8 @@
+[package]
+name = "transport-simulator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+transport-core = { path = "../../crates/transport-core" }
+

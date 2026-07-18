@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "crates/event-core",
+    "crates/persistence-core",
+    "crates/transport-core",
+    "apps/transport-simulator",
+]
+resolver = "3"
