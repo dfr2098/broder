@@ -1,0 +1,8 @@
+[package]
+name = "spatial-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tracking-core = { path = "../tracking-core" }
+vision-core = { path = "../vision-core" }

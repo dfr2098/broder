@@ -1,0 +1,14 @@
+[package]
+name = "persistence-postgres"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "persistence_postgres"
+path = "src/lib.rs"
+
+[dependencies]
+event-core = { path = "../event-core" }
+persistence-core = { path = "../persistence-core" }
+postgres = "0.19.14"
+vision-core = { path = "../vision-core" }

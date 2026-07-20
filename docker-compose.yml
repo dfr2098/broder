@@ -1,69 +1,23 @@
+name: little-brother
+
 services:
   db:
     image: postgres:16.4
-    user: "postgres"
-    restart: always
-    env_file: .env
+    container_name: little-brother-db
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-appdb}
-      POSTGRES_USER: ${POSTGRES_USER:-appuser}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-little_brother}
+      POSTGRES_USER: ${POSTGRES_USER:-little_brother}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    profiles: ["db"]
-
-  redis:
-    image: redis:7.2.5
-    user: "redis"
-    restart: always
-    ports:
-      - "6379:6379"
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    profiles: ["cache"]
-
-  backend:
-    build:
-      context: ./backend
-    user: "app"
-    env_file: .env
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-sqlite:///./app.db}
-      REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379/0}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    profiles: ["app"]
-
-  frontend:
-    build:
-      context: ./frontend
-    user: "node"
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-    command: npm run dev -- --host 0.0.0.0 --port 3000
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    profiles: ["app"]
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
-  db_data:
+  postgres_data:

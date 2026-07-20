@@ -1,0 +1,13 @@
+[package]
+name = "video-viewer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+opencv = { version = "0.99", default-features = false, features = [
+    "clang-runtime",
+    "highgui",
+    "imgproc",
+    "videoio",
+] }
+
