@@ -22,6 +22,10 @@ Todos los comandos de esta guía se ejecutan desde la raíz del repositorio.
 | `TRACK_MAX_DISTANCE` | `0.25` | Distancia normalizada máxima |
 | `DB_PORT` | `5432` | Puerto local de PostgreSQL |
 | `DATABASE_URL` | construida desde `.env` | Conexión usada por Rust |
+| `PERSISTENCE_MODE` | `required` | `required` o `best-effort` |
+| `PERSISTENCE_QUEUE` | `256` | Eventos máximos esperando al worker |
+| `PERSISTENCE_BATCH` | `25` | Detecciones por transacción |
+| `PERSISTENCE_FLUSH_MS` | `500` | Tiempo máximo antes del commit |
 
 Las variables pueden pasarse a `make` sin modificar archivos:
 
@@ -48,6 +52,13 @@ make infra-reset
 
 Use `infra-reset` únicamente cuando la pérdida total de los datos sea
 intencional.
+
+Comprobar instalación, archivos y coherencia del puerto PostgreSQL:
+
+```bash
+make doctor
+make doctor DB_PORT=55432
+```
 
 ## Visor provisional
 
@@ -132,6 +143,10 @@ cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- --help
 | `--track-max-distance N` | Distancia normalizada máxima |
 | `--database-url URL` | Conexión PostgreSQL explícita |
 | `--no-persistence` | Omite la conexión y las escrituras |
+| `--persistence-mode MODO` | `required` o `best-effort` |
+| `--persistence-queue N` | Capacidad acotada de la cola |
+| `--persistence-batch N` | Eventos por transacción |
+| `--persistence-flush-ms N` | Intervalo máximo para confirmar |
 
 El visor provisional admite `--fps`, `--log`, `--info` y un único archivo de
 video. Su ayuda se consulta con:
@@ -140,9 +155,14 @@ video. Su ayuda se consulta con:
 cargo run --manifest-path core/rs/Cargo.toml -p video-viewer -- --help
 ```
 
-Cuando `DATABASE_URL` está configurada, el proceso exige que PostgreSQL esté
-disponible. Si falla una escritura, el proceso termina con un error visible en
-vez de perder la detección silenciosamente.
+La persistencia se ejecuta en un worker independiente. `required` aplica
+backpressure cuando se llena la cola y termina con error si PostgreSQL no se
+recupera. `best-effort` mantiene la visión activa, reintenta la conexión y
+contabiliza los eventos descartados:
+
+```bash
+make vision PERSISTENCE_MODE=best-effort
+```
 
 Para ejecutar una inspección sin persistencia se puede llamar directamente al
 binario:
@@ -167,9 +187,8 @@ make vision \
 ```
 
 La fuente RTSP se captura continuamente, pero sólo se procesa a la frecuencia
-configurada. En esta fase la fuente completa se escribe en el log inicial; no
-se deben usar credenciales de producción embebidas en la URL hasta incorporar
-redacción de secretos o un mecanismo seguro de configuración.
+configurada. El usuario y contraseña se sustituyen por `***` en logs y errores;
+OpenCV recibe internamente la URL original para conectarse.
 
 ## Configuración espacial
 
@@ -214,10 +233,14 @@ DETECTION       observación independiente de YOLO
 TRACK           identidad activa y trayectoria acumulada
 TRACK_FINISHED  identidad terminada
 SPATIAL         zona ocupada y cruces de líneas
+PERSISTENCE     estado periódico de cola y confirmaciones
+PERSISTENCE_FINAL  métricas después del flush de cierre
+METRICS         FPS efectivo y latencia media/máxima de inferencia
 ```
 
 El resumen final incluye frames capturados, inferencias, detecciones,
-detecciones persistidas y tracks finalizados.
+detecciones persistidas, descartadas y tracks finalizados. Una detección sólo
+cuenta como persistida después del commit PostgreSQL.
 
 ## Verificación del proyecto
 
@@ -229,9 +252,9 @@ make check
 make release
 ```
 
-Las pruebas cubren bus y router, topología y movimientos, muestreo y NMS,
-tracking, geometría espacial, política de persistencia y conversiones de tipos
-PostgreSQL. La integración real con la base se valida mediante
+Las pruebas cubren bus, flush y router, topología y movimientos, muestreo y
+NMS, tracking, geometría espacial, política de persistencia, redacción de
+secretos y conversiones PostgreSQL. La integración real se valida mediante
 `make vision-smoke` seguido de `make vision-query`.
 
 ## Consultas PostgreSQL

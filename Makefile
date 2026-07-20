@@ -1,4 +1,4 @@
-.PHONY: check test lint release run viewer viewer-info viewer-logs vision vision-headless vision-smoke vision-logs vision-query verify-model infra-up infra-down infra-logs infra-reset
+.PHONY: check test lint release doctor run viewer viewer-info viewer-logs vision vision-headless vision-smoke vision-logs vision-query verify-model infra-up infra-down infra-logs infra-reset
 
 -include .env
 
@@ -24,6 +24,11 @@ TRACK_MAX_MISSED ?= 5
 TRACK_MAX_LOST_MS ?= 1500
 TRACK_MIN_IOU ?= 0.05
 TRACK_MAX_DISTANCE ?= 0.25
+PERSISTENCE_MODE ?= required
+PERSISTENCE_QUEUE ?= 256
+PERSISTENCE_BATCH ?= 25
+PERSISTENCE_FLUSH_MS ?= 500
+PERSISTENCE_ARGS = --persistence-mode "$(PERSISTENCE_MODE)" --persistence-queue "$(PERSISTENCE_QUEUE)" --persistence-batch "$(PERSISTENCE_BATCH)" --persistence-flush-ms "$(PERSISTENCE_FLUSH_MS)"
 
 check: test lint verify-model
 
@@ -36,6 +41,9 @@ lint:
 
 release:
 	cd core/rs && cargo build --release --workspace
+
+doctor:
+	bash scripts/doctor.sh "$(MODEL)" "$(VIDEO)" "$(SPATIAL_CONFIG)" "$(DB_PORT)"
 
 run:
 	cd core/rs && cargo run -p transport-simulator
@@ -50,13 +58,13 @@ viewer-logs:
 	tail -n 100 -F "$(LOG)"
 
 vision:
-	cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- --display --fps "$(FPS)" --confidence "$(CONFIDENCE)" --nms "$(NMS)" --source-id "$(SOURCE_ID)" --model "$(MODEL)" --spatial-config "$(SPATIAL_CONFIG)" --log "$(VISION_LOG)" --track-min-hits "$(TRACK_MIN_HITS)" --track-max-missed "$(TRACK_MAX_MISSED)" --track-max-lost-ms "$(TRACK_MAX_LOST_MS)" --track-min-iou "$(TRACK_MIN_IOU)" --track-max-distance "$(TRACK_MAX_DISTANCE)" "$(VIDEO)"
+	cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- --display --fps "$(FPS)" --confidence "$(CONFIDENCE)" --nms "$(NMS)" --source-id "$(SOURCE_ID)" --model "$(MODEL)" --spatial-config "$(SPATIAL_CONFIG)" --log "$(VISION_LOG)" --track-min-hits "$(TRACK_MIN_HITS)" --track-max-missed "$(TRACK_MAX_MISSED)" --track-max-lost-ms "$(TRACK_MAX_LOST_MS)" --track-min-iou "$(TRACK_MIN_IOU)" --track-max-distance "$(TRACK_MAX_DISTANCE)" $(PERSISTENCE_ARGS) "$(VIDEO)"
 
 vision-headless:
-	cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- --fps "$(FPS)" --confidence "$(CONFIDENCE)" --nms "$(NMS)" --source-id "$(SOURCE_ID)" --model "$(MODEL)" --spatial-config "$(SPATIAL_CONFIG)" --log "$(VISION_LOG)" --track-min-hits "$(TRACK_MIN_HITS)" --track-max-missed "$(TRACK_MAX_MISSED)" --track-max-lost-ms "$(TRACK_MAX_LOST_MS)" --track-min-iou "$(TRACK_MIN_IOU)" --track-max-distance "$(TRACK_MAX_DISTANCE)" "$(VIDEO)"
+	cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- --fps "$(FPS)" --confidence "$(CONFIDENCE)" --nms "$(NMS)" --source-id "$(SOURCE_ID)" --model "$(MODEL)" --spatial-config "$(SPATIAL_CONFIG)" --log "$(VISION_LOG)" --track-min-hits "$(TRACK_MIN_HITS)" --track-max-missed "$(TRACK_MAX_MISSED)" --track-max-lost-ms "$(TRACK_MAX_LOST_MS)" --track-min-iou "$(TRACK_MIN_IOU)" --track-max-distance "$(TRACK_MAX_DISTANCE)" $(PERSISTENCE_ARGS) "$(VIDEO)"
 
 vision-smoke:
-	cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- --fps "$(FPS)" --confidence "$(CONFIDENCE)" --nms "$(NMS)" --source-id "$(SOURCE_ID)" --model "$(MODEL)" --spatial-config "$(SPATIAL_CONFIG)" --log "$(VISION_LOG)" --track-min-hits "$(TRACK_MIN_HITS)" --track-max-missed "$(TRACK_MAX_MISSED)" --track-max-lost-ms "$(TRACK_MAX_LOST_MS)" --track-min-iou "$(TRACK_MIN_IOU)" --track-max-distance "$(TRACK_MAX_DISTANCE)" --max-inferences 6 "$(VIDEO)"
+	cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- --fps "$(FPS)" --confidence "$(CONFIDENCE)" --nms "$(NMS)" --source-id "$(SOURCE_ID)" --model "$(MODEL)" --spatial-config "$(SPATIAL_CONFIG)" --log "$(VISION_LOG)" --track-min-hits "$(TRACK_MIN_HITS)" --track-max-missed "$(TRACK_MAX_MISSED)" --track-max-lost-ms "$(TRACK_MAX_LOST_MS)" --track-min-iou "$(TRACK_MIN_IOU)" --track-max-distance "$(TRACK_MAX_DISTANCE)" $(PERSISTENCE_ARGS) --max-inferences 6 "$(VIDEO)"
 
 vision-logs:
 	tail -n 100 -F "$(VISION_LOG)"

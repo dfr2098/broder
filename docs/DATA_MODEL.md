@@ -144,8 +144,13 @@ infraestructura `persistence-postgres`.
 
 Las restricciones validan rangos, dimensiones, versión y valores no negativos.
 La migración se ejecuta automáticamente al conectar y usa operaciones
-idempotentes. La inserción usa una sentencia preparada y
-`ON CONFLICT (event_id) DO NOTHING`.
+idempotentes. Las inserciones usan una sentencia preparada dentro de una
+transacción por lotes y `ON CONFLICT (event_id) DO NOTHING`.
+
+Antes del adaptador existe una cola acotada. El worker hace flush al completar
+el lote, vencer el intervalo o cerrar el motor. Si una transacción falla, abre
+una conexión nueva y reintenta una vez. En modo `required` se aplica
+backpressure; en `best-effort` el análisis continúa y contabiliza las pérdidas.
 
 ## Semántica de tiempos
 
@@ -179,4 +184,3 @@ La tabla actual no guarda:
 Tampoco existe aún una política de retención o particionamiento. Antes de una
 operación continua se deberán definir conservación, limpieza, respaldo y, si el
 volumen lo exige, particiones o un motor temporal especializado.
-

@@ -230,7 +230,9 @@ persiste resultados.
 ```mermaid
 flowchart LR
     DET[VisionDetection] --> ENV[EventEnvelope<br/>vision.detection.observed]
-    ENV --> BUS{{InMemoryEventBus}}
+    ENV --> QUEUE[Cola acotada]
+    QUEUE --> WORKER[Worker de persistencia]
+    WORKER --> BUS{{InMemoryEventBus}}
     BUS --> ROUTER[PersistenceRouter]
     ROUTER --> POLICY{Dominio temporal}
     POLICY --> WRITER[PostgresVisionDetectionWriter]
@@ -258,9 +260,10 @@ posición relativa dentro del video se conserva por separado en
 una secuencia para evitar colisiones al reiniciar la cámara o reprocesar un
 archivo.
 
-El bus actual es síncrono y vive dentro del proceso, suficiente para el
-prototipo limitado a 5 FPS. Un bus durable y las escrituras por lotes podrán
-reemplazar estas implementaciones sin modificar `vision-core`.
+La entrega desde video es asíncrona mediante una cola acotada. Dentro del worker
+el bus y el router son síncronos, y PostgreSQL confirma transacciones por lote,
+intervalo o cierre. El escritor reconecta y reintenta una vez. Un bus durable
+podrá reemplazar esta cola sin modificar `vision-core`.
 
 Esta fase persiste detecciones. Los tracks, resultados espaciales, video,
 alarmas y reglas industriales permanecen fuera de su alcance.
@@ -374,6 +377,8 @@ flowchart LR
         VC[vision-core]
         TC[tracking-core]
         SC[spatial-core]
+        Q[Cola acotada]
+        PW[Worker de persistencia]
         PR[PersistenceRouter]
         PGA[persistence-postgres]
 
@@ -383,7 +388,7 @@ flowchart LR
         VIS --> VC
         VC --> TC
         TC --> SC
-        VIS -->|VisionDetection normalizada| BUS
+        VIS -->|VisionDetection normalizada| Q --> PW --> BUS
         BUS --> PR --> PGA
     end
 
@@ -422,7 +427,7 @@ crates/
 └── clickhouse-temporal   # futuro
 ```
 
-El bus incluido actualmente es síncrono y en memoria. Sirve para pruebas y para
-el prototipo, pero no promete durabilidad. Antes de producción debe sustituirse
-por un adaptador durable con confirmación, reintentos, idempotencia y cola de
-eventos fallidos.
+El bus y la cola actuales viven en memoria. Proporcionan aislamiento,
+backpressure, lotes y métricas, pero no sobreviven a una caída completa del
+proceso. Antes de producción deben sustituirse por un adaptador durable con
+confirmación e inventario de eventos fallidos.

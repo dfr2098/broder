@@ -15,6 +15,7 @@ use crate::config::Options;
 use crate::display::{DisplayContext, draw_detections};
 use crate::logger::Logger;
 use crate::persistence::VisionEventPublisher;
+use crate::security::redact_source;
 use crate::yolo::YoloEngine;
 
 const WINDOW_NAME: &str = "Little Brother - YOLO inference";
@@ -28,7 +29,11 @@ pub(crate) fn run_stream(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut capture = VideoCapture::from_file(&options.source, videoio::CAP_ANY)?;
     if !capture.is_opened()? {
-        return Err(format!("no se pudo abrir la fuente: {}", options.source).into());
+        return Err(format!(
+            "no se pudo abrir la fuente: {}",
+            redact_source(&options.source)
+        )
+        .into());
     }
 
     let width = capture.get(videoio::CAP_PROP_FRAME_WIDTH)?.round() as i32;
@@ -55,8 +60,10 @@ pub(crate) fn run_stream(
     let mut inference_count = 0_u64;
     let mut detection_count = 0_u64;
     let mut finished_track_count = 0_u64;
-    let mut persisted_detection_count = 0_u64;
+    let mut total_inference_ms = 0.0_f64;
+    let mut maximum_inference_ms = 0.0_f64;
     let mut event_publisher = event_publisher;
+    let mut last_persistence_metrics = Instant::now();
 
     loop {
         if !capture.read(&mut frame)? || frame.empty() {
@@ -97,11 +104,20 @@ pub(crate) fn run_stream(
             .collect::<Result<Vec<_>, _>>()?;
 
         inference_count += 1;
+        total_inference_ms += inference_ms;
+        maximum_inference_ms = maximum_inference_ms.max(inference_ms);
         detection_count += detections.len() as u64;
         log_detections(logger, frame_id, timestamp_ms, inference_ms, &detections)?;
         if let Some(publisher) = event_publisher.as_deref_mut() {
             publisher.publish_all(&detections)?;
-            persisted_detection_count += detections.len() as u64;
+            if last_persistence_metrics.elapsed() >= Duration::from_secs(10) {
+                let metrics = publisher.snapshot();
+                logger.info(format!(
+                    "PERSISTENCE connected={} queued={} persisted={} dropped={}",
+                    metrics.connected, metrics.queued, metrics.persisted, metrics.dropped
+                ))?;
+                last_persistence_metrics = Instant::now();
+            }
         }
         let tracking = tracker.process_frame(frame_id, timestamp_ms, &detections)?;
         finished_track_count += tracking.finished_tracks.len() as u64;
@@ -157,8 +173,33 @@ pub(crate) fn run_stream(
     for track in &remaining_tracks {
         log_finished_track(logger, track)?;
     }
+    let persistence = if let Some(publisher) = event_publisher {
+        publisher.finish()?
+    } else {
+        Default::default()
+    };
     logger.info(format!(
-        "resumen: capturados={captured_frames} inferencias={inference_count} detecciones={detection_count} detecciones_persistidas={persisted_detection_count} tracks_finalizados={finished_track_count}"
+        "PERSISTENCE_FINAL connected={} queued={} persisted={} dropped={}",
+        persistence.connected, persistence.queued, persistence.persisted, persistence.dropped
+    ))?;
+    let elapsed_seconds = stream_started.elapsed().as_secs_f64();
+    let average_inference_ms = if inference_count == 0 {
+        0.0
+    } else {
+        total_inference_ms / inference_count as f64
+    };
+    let effective_fps = if elapsed_seconds > 0.0 {
+        inference_count as f64 / elapsed_seconds
+    } else {
+        0.0
+    };
+    logger.info(format!(
+        "METRICS elapsed_s={elapsed_seconds:.3} effective_inference_fps={effective_fps:.3} inference_ms_avg={average_inference_ms:.3} inference_ms_max={maximum_inference_ms:.3}"
+    ))?;
+    logger.info(format!(
+        "resumen: capturados={captured_frames} inferencias={inference_count} detecciones={detection_count} detecciones_persistidas={} detecciones_descartadas={} tracks_finalizados={finished_track_count}",
+        persistence.persisted,
+        persistence.dropped
     ))?;
     Ok(())
 }

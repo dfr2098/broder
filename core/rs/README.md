@@ -88,7 +88,8 @@ apps/vision-inference/src/
 ├── stream.rs           captura, muestreo y tracking
 ├── display.rs          cajas, etiquetas y track_id
 ├── spatial_config.rs   carga de geometría de cámara
-├── persistence.rs      bus, política y composición del router
+├── persistence.rs      cola, worker, bus y composición del router
+├── security.rs         redacción de credenciales RTSP
 └── logger.rs           consola y archivo
 
 apps/video-viewer/src/

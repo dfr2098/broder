@@ -101,6 +101,12 @@ impl Error for HandlerError {}
 pub trait EventHandler<E> {
     fn name(&self) -> &'static str;
     fn handle(&mut self, event: &EventEnvelope<E>) -> Result<(), HandlerError>;
+
+    /// Fuerza la entrega de buffers internos. Los consumidores sin buffers no
+    /// necesitan sobrescribir este método.
+    fn flush(&mut self) -> Result<(), HandlerError> {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -118,6 +124,7 @@ impl Error for PublishError {}
 
 pub trait EventBus<E> {
     fn publish(&mut self, event: &EventEnvelope<E>) -> Result<(), PublishError>;
+    fn flush(&mut self) -> Result<(), PublishError>;
 }
 
 /// Implementación síncrona para pruebas y prototipos. Los fallos se recopilan
@@ -163,6 +170,25 @@ impl<E> EventBus<E> for InMemoryEventBus<E> {
             Err(PublishError { failures })
         }
     }
+
+    fn flush(&mut self) -> Result<(), PublishError> {
+        let failures = self
+            .handlers
+            .iter_mut()
+            .filter_map(|handler| {
+                handler.flush().err().map(|mut error| {
+                    error.handler = handler.name();
+                    error
+                })
+            })
+            .collect::<Vec<_>>();
+
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(PublishError { failures })
+        }
+    }
 }
 
 #[cfg(test)]
@@ -172,7 +198,10 @@ mod tests {
 
     use super::*;
 
-    struct Collector(Rc<RefCell<Vec<String>>>);
+    struct Collector {
+        values: Rc<RefCell<Vec<String>>>,
+        flushes: Rc<RefCell<u32>>,
+    }
 
     impl EventHandler<String> for Collector {
         fn name(&self) -> &'static str {
@@ -180,7 +209,12 @@ mod tests {
         }
 
         fn handle(&mut self, event: &EventEnvelope<String>) -> Result<(), HandlerError> {
-            self.0.borrow_mut().push(event.payload.clone());
+            self.values.borrow_mut().push(event.payload.clone());
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), HandlerError> {
+            *self.flushes.borrow_mut() += 1;
             Ok(())
         }
     }
@@ -189,9 +223,16 @@ mod tests {
     fn publishes_the_same_normalized_event_to_multiple_consumers() {
         let first = Rc::new(RefCell::new(Vec::new()));
         let second = Rc::new(RefCell::new(Vec::new()));
+        let flushes = Rc::new(RefCell::new(0));
         let mut bus = InMemoryEventBus::new();
-        bus.subscribe(Collector(first.clone()));
-        bus.subscribe(Collector(second.clone()));
+        bus.subscribe(Collector {
+            values: first.clone(),
+            flushes: flushes.clone(),
+        });
+        bus.subscribe(Collector {
+            values: second.clone(),
+            flushes: flushes.clone(),
+        });
         let event = EventEnvelope::new(
             "EV1",
             "object.entered",
@@ -203,8 +244,10 @@ mod tests {
         .unwrap();
 
         bus.publish(&event).unwrap();
+        bus.flush().unwrap();
 
         assert_eq!(first.borrow().as_slice(), ["BOX-1"]);
         assert_eq!(second.borrow().as_slice(), ["BOX-1"]);
+        assert_eq!(*flushes.borrow(), 2);
     }
 }

@@ -38,6 +38,15 @@ de eventos y `PersistenceRouter`; los núcleos visuales no conocen SQL.
 
 ## Comprobar el proyecto
 
+Diagnosticar dependencias, archivos y PostgreSQL:
+
+```bash
+make doctor
+make doctor DB_PORT=55432  # cuando se usa el puerto alternativo
+```
+
+Ejecutar todas las pruebas:
+
 ```bash
 make check
 ```
@@ -190,9 +199,19 @@ make infra-up
 ```
 
 `make vision`, `make vision-headless` y `make vision-smoke` leen
-`DATABASE_URL` y guardan cada `VisionDetection` en
-`temporal.vision_detection`. El esquema y los índices se crean de manera
-idempotente al conectarse.
+`DATABASE_URL` y envían cada `VisionDetection` a un worker de persistencia. El
+worker usa una cola acotada, transacciones por lotes, flush periódico y
+reconexión. El esquema y los índices se crean de manera idempotente.
+
+```text
+mode=required queue=256 batch=25 flush_ms=500
+```
+
+Para mantener la visión activa cuando PostgreSQL no esté disponible:
+
+```bash
+make vision PERSISTENCE_MODE=best-effort
+```
 
 Consultar las últimas veinte detecciones:
 

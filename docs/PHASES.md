@@ -82,20 +82,25 @@ demostrativa y el video de prueba no tiene una cámara fija.
 Implementado:
 
 - `EventEnvelope<VisionDetection>`;
-- bus síncrono en memoria;
+- bus síncrono dentro de un worker de persistencia;
+- entrega asíncrona mediante cola acotada;
 - política de dominio temporal;
 - `PersistenceRouter` independiente del motor de base;
 - adaptador PostgreSQL separado;
 - esquema `temporal` y tabla `vision_detection`;
 - migración automática idempotente;
-- inserción preparada con columnas tipadas;
+- inserción preparada con columnas tipadas y transacciones por lotes;
+- flush por tamaño, intervalo y cierre;
+- reconexión y reintento de transacción;
+- modos `required` y `best-effort`;
+- métricas de cola, confirmaciones y descartes;
 - índices por tiempo, cámara y clase;
 - identificadores de evento por sesión;
 - consultas desde `make vision-query`;
 - posibilidad de desactivar persistencia con `--no-persistence`.
 
-Límite actual: sólo se persisten detecciones. El bus no es durable, las
-inserciones son síncronas e individuales y no existe política de retención.
+Límite actual: sólo se persisten detecciones. La cola vive en memoria y no
+sobrevive a una caída completa del proceso. No existe política de retención.
 
 ## Fuera del alcance actual
 
@@ -133,4 +138,3 @@ Antes de implementar alarmas conviene cerrar, en este orden:
 
 Esta secuencia evita construir alertas sobre detecciones o mediciones todavía
 no calibradas.
-

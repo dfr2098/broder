@@ -48,6 +48,10 @@ pub trait PersistenceWriter<E> {
     fn name(&self) -> &'static str;
     fn domain(&self) -> PersistenceDomain;
     fn persist(&mut self, event: &EventEnvelope<E>) -> Result<(), PersistenceError>;
+
+    fn flush(&mut self) -> Result<(), PersistenceError> {
+        Ok(())
+    }
 }
 
 pub struct PersistenceRouter<E, P: PersistencePolicy<E>> {
@@ -82,6 +86,18 @@ impl<E, P: PersistencePolicy<E>> EventHandler<E> for PersistenceRouter<E, P> {
         {
             writer.persist(event).map_err(|error| {
                 HandlerError::new(writer.name(), format!("no se pudo persistir: {error}"))
+            })?;
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), HandlerError> {
+        for writer in &mut self.writers {
+            writer.flush().map_err(|error| {
+                HandlerError::new(
+                    writer.name(),
+                    format!("no se pudo vaciar el buffer: {error}"),
+                )
             })?;
         }
         Ok(())

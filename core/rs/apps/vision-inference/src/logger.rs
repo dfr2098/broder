@@ -34,8 +34,16 @@ impl Logger {
     }
 
     pub(crate) fn info(&mut self, message: impl AsRef<str>) -> std::io::Result<()> {
+        self.write("INFO", message)
+    }
+
+    pub(crate) fn warn(&mut self, message: impl AsRef<str>) -> std::io::Result<()> {
+        self.write("WARN", message)
+    }
+
+    fn write(&mut self, level: &str, message: impl AsRef<str>) -> std::io::Result<()> {
         let elapsed = self.started_at.elapsed().as_secs_f64();
-        let line = format!("[+{elapsed:09.3}s] INFO {}", message.as_ref());
+        let line = format!("[+{elapsed:09.3}s] {level} {}", message.as_ref());
         println!("{line}");
         writeln!(self.file, "{line}")?;
         self.file.flush()

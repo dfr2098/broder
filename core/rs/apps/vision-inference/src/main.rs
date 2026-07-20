@@ -3,6 +3,7 @@ mod config;
 mod display;
 mod logger;
 mod persistence;
+mod security;
 mod spatial_config;
 mod stream;
 mod yolo;
@@ -12,7 +13,8 @@ use std::time::Instant;
 use classes::load_class_names;
 use config::{parse_options, print_help};
 use logger::Logger;
-use persistence::VisionEventPublisher;
+use persistence::{PersistenceStartup, VisionEventPublisher};
+use security::redact_source;
 use spatial_config::load_spatial_model;
 use stream::run_stream;
 use yolo::YoloEngine;
@@ -30,7 +32,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut logger = Logger::open(&options.log_path)?;
     logger.info(format!(
         "fuente={} id={}",
-        options.source, options.source_id
+        redact_source(&options.source),
+        options.source_id
     ))?;
 
     let spatial_model = options
@@ -60,16 +63,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         options.nms_threshold
     ))?;
 
-    let mut event_publisher = options
-        .database_url
-        .as_deref()
-        .map(|database_url| VisionEventPublisher::connect(database_url, &options.source_id))
-        .transpose()?;
-    if event_publisher.is_some() {
-        logger.info("persistencia PostgreSQL activa: temporal.vision_detection")?;
+    let mut event_publisher = if let Some(database_url) = options.database_url.as_deref() {
+        let (publisher, startup) =
+            VisionEventPublisher::start(database_url, &options.source_id, options.persistence)?;
+        match startup {
+            PersistenceStartup::Connected => logger.info(format!(
+                "persistencia asíncrona activa: mode={} queue={} batch={} flush_ms={}",
+                options.persistence.mode,
+                options.persistence.queue_capacity,
+                options.persistence.batch_size,
+                options.persistence.flush_interval_ms
+            ))?,
+            PersistenceStartup::Recovering(message) => logger.warn(format!(
+                "persistencia iniciada sin conexión; se reintentará: {message}"
+            ))?,
+        }
+        Some(publisher)
     } else {
         logger.info("persistencia desactivada: DATABASE_URL no configurada")?;
-    }
+        None
+    };
 
     let class_names = load_class_names(options.classes.as_deref())?;
     let model_started = Instant::now();

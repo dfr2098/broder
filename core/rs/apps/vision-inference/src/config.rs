@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt::{self, Display};
 use std::path::PathBuf;
 
 use tracking_core::TrackerConfig;
@@ -9,6 +10,32 @@ const DEFAULT_LOG: &str = "logs/vision-inference.log";
 const DEFAULT_FPS: f64 = 5.0;
 const DEFAULT_CONFIDENCE: f32 = 0.25;
 const DEFAULT_NMS: f32 = 0.45;
+const DEFAULT_PERSISTENCE_QUEUE: usize = 256;
+const DEFAULT_PERSISTENCE_BATCH: usize = 25;
+const DEFAULT_PERSISTENCE_FLUSH_MS: u64 = 500;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PersistenceMode {
+    Required,
+    BestEffort,
+}
+
+impl Display for PersistenceMode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Required => "required",
+            Self::BestEffort => "best-effort",
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PersistenceConfig {
+    pub mode: PersistenceMode,
+    pub queue_capacity: usize,
+    pub batch_size: usize,
+    pub flush_interval_ms: u64,
+}
 
 #[derive(Debug)]
 pub(crate) struct Options {
@@ -18,6 +45,7 @@ pub(crate) struct Options {
     pub classes: Option<PathBuf>,
     pub spatial_config: Option<PathBuf>,
     pub database_url: Option<String>,
+    pub persistence: PersistenceConfig,
     pub log_path: PathBuf,
     pub processing_fps: f64,
     pub confidence_threshold: f32,
@@ -37,6 +65,12 @@ pub(crate) fn parse_options() -> Result<Options, String> {
         .ok()
         .filter(|value| !value.trim().is_empty());
     let mut log_path = PathBuf::from(DEFAULT_LOG);
+    let mut persistence = PersistenceConfig {
+        mode: PersistenceMode::Required,
+        queue_capacity: DEFAULT_PERSISTENCE_QUEUE,
+        batch_size: DEFAULT_PERSISTENCE_BATCH,
+        flush_interval_ms: DEFAULT_PERSISTENCE_FLUSH_MS,
+    };
     let mut processing_fps = DEFAULT_FPS;
     let mut confidence_threshold = DEFAULT_CONFIDENCE;
     let mut nms_threshold = DEFAULT_NMS;
@@ -57,6 +91,29 @@ pub(crate) fn parse_options() -> Result<Options, String> {
                 database_url = Some(next_value(&mut args, "--database-url")?);
             }
             "--no-persistence" => database_url = None,
+            "--persistence-mode" => {
+                let value = next_value(&mut args, "--persistence-mode")?;
+                persistence.mode = match value.as_str() {
+                    "required" => PersistenceMode::Required,
+                    "best-effort" => PersistenceMode::BestEffort,
+                    _ => return Err("--persistence-mode debe ser required o best-effort".into()),
+                };
+            }
+            "--persistence-queue" => {
+                persistence.queue_capacity = next_value(&mut args, "--persistence-queue")?
+                    .parse::<usize>()
+                    .map_err(|_| "--persistence-queue debe ser un entero".to_owned())?;
+            }
+            "--persistence-batch" => {
+                persistence.batch_size = next_value(&mut args, "--persistence-batch")?
+                    .parse::<usize>()
+                    .map_err(|_| "--persistence-batch debe ser un entero".to_owned())?;
+            }
+            "--persistence-flush-ms" => {
+                persistence.flush_interval_ms = next_value(&mut args, "--persistence-flush-ms")?
+                    .parse::<u64>()
+                    .map_err(|_| "--persistence-flush-ms debe ser un entero".to_owned())?;
+            }
             "--log" => log_path = PathBuf::from(next_value(&mut args, "--log")?),
             "--fps" => {
                 let value = next_value(&mut args, "--fps")?;
@@ -133,6 +190,14 @@ pub(crate) fn parse_options() -> Result<Options, String> {
     if max_inferences == Some(0) {
         return Err("--max-inferences debe ser mayor que cero".to_owned());
     }
+    if persistence.queue_capacity == 0
+        || persistence.batch_size == 0
+        || persistence.flush_interval_ms == 0
+    {
+        return Err(
+            "la cola, el lote y el intervalo de persistencia deben ser mayores que cero".to_owned(),
+        );
+    }
     tracker_config = tracker_config
         .validate()
         .map_err(|error| error.to_string())?;
@@ -144,6 +209,7 @@ pub(crate) fn parse_options() -> Result<Options, String> {
         classes,
         spatial_config,
         database_url,
+        persistence,
         log_path,
         processing_fps,
         confidence_threshold,
@@ -177,6 +243,10 @@ pub(crate) fn print_help() {
            --spatial-config RUTA   Geometría normalizada de la cámara\n\
            --database-url URL      PostgreSQL (o variable DATABASE_URL)\n\
            --no-persistence        Ejecutar sin guardar detecciones\n\
+           --persistence-mode MODO required | best-effort\n\
+           --persistence-queue N   Eventos máximos en espera (256)\n\
+           --persistence-batch N   Detecciones por transacción (25)\n\
+           --persistence-flush-ms N  Flush máximo en milisegundos (500)\n\
            --source-id ID          Identidad lógica de la fuente\n\
            --fps 5                 Frecuencia independiente de inferencia\n\
            --confidence 0.25       Confianza mínima\n\

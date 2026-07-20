@@ -49,6 +49,7 @@ ejecuta en contenedor.
 ```bash
 cp .env.example .env
 make infra-up
+make doctor
 make check
 make vision-smoke
 make vision-query
@@ -79,4 +80,3 @@ Cuando la documentación y el código difieran, estas son las fuentes de verdad:
 | Esquema PostgreSQL | [`0001_temporal_vision_detection.sql`](../core/rs/crates/persistence-postgres/migrations/0001_temporal_vision_detection.sql) |
 | Dependencias Rust | [`Cargo.lock`](../core/rs/Cargo.lock) |
 | Contenedor PostgreSQL | [`docker-compose.yml`](../docker-compose.yml) |
-

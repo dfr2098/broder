@@ -134,6 +134,7 @@ make vision-smoke DB_PORT=55432
 ```bash
 make check
 make release
+make doctor
 ```
 
 `make check` ejecuta pruebas, formato, Clippy y checksum del modelo. Los
