@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Entornos y secretos
+.env
+.env.*
+!.env.example
+
+# Rust
+/core/rs/target/
+target/
+
+# Node
+node_modules/
+
+# Sistema
+.DS_Store
