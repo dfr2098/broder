@@ -1,0 +1,11 @@
+# Geometría DEMO en coordenadas normalizadas. Debe recalibrarse para una cámara fija real.
+camera=camera-1
+observation=0.00,0.00;1.00,0.00;1.00,1.00;0.00,1.00
+
+zone=transportador-demo|Transportador DEMO|conveyor||norte|0.00,0.00;1.00,0.00;1.00,1.00;0.00,1.00
+zone=carril-central|Carril central|lane|transportador-demo|norte|0.33,0.00;0.67,0.00;0.67,1.00;0.33,1.00
+zone=area-entrada|Área de entrada DEMO|entry|transportador-demo|norte|0.00,0.00;0.15,0.00;0.15,1.00;0.00,1.00
+zone=area-salida|Área de salida DEMO|exit|transportador-demo|norte|0.85,0.00;1.00,0.00;1.00,1.00;0.85,1.00
+
+line=linea-entrada|Línea de entrada|entry|0.15,0.00|0.15,1.00
+line=linea-salida|Línea de salida|exit|0.85,0.00|0.85,1.00

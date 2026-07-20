@@ -1,0 +1,11 @@
+.env
+*.py[cod]
+**/__pycache__/
+
+# Artefactos y recursos locales
+core/rs/target/
+core/yolo/export-env/
+core/yolo/models/*.onnx
+video prueba/
+video prueva/
+logs/

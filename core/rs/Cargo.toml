@@ -2,7 +2,13 @@
 members = [
     "crates/event-core",
     "crates/persistence-core",
+    "crates/persistence-postgres",
+    "crates/spatial-core",
     "crates/transport-core",
+    "crates/tracking-core",
+    "crates/vision-core",
     "apps/transport-simulator",
+    "apps/vision-inference",
+    "apps/video-viewer",
 ]
 resolver = "3"
