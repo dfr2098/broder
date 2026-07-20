@@ -49,6 +49,28 @@ fn finds_a_route_through_a_branch() {
 }
 
 #[test]
+fn ignores_inactive_connections_when_routing() {
+    let mut network = ConveyorNetwork::new();
+    for code in ["TR001", "TR002"] {
+        network.add_conveyor(conveyor(code)).unwrap();
+    }
+    let mut connection = ConveyorConnection::new(
+        ConnectionId::new("CN1").unwrap(),
+        plant_id(),
+        ConveyorId::new("TR001").unwrap(),
+        ConveyorId::new("TR002").unwrap(),
+    );
+    connection.active = false;
+    network.add_connection(connection).unwrap();
+
+    let route = network.find_route(
+        &ConveyorId::new("TR001").unwrap(),
+        &ConveyorId::new("TR002").unwrap(),
+    );
+    assert!(route.is_none());
+}
+
+#[test]
 fn rejects_a_connection_to_itself() {
     let mut network = ConveyorNetwork::new();
     network.add_conveyor(conveyor("TR001")).unwrap();

@@ -112,6 +112,16 @@ impl ConveyorNetwork {
             .unwrap_or(&[])
     }
 
+    /// Destinos alcanzables solo a través de conexiones activas. El cálculo de
+    /// rutas debe coincidir con lo que `has_active_connection` permite mover.
+    fn active_destinations(&self, origin_id: &ConveyorId) -> Vec<ConveyorId> {
+        self.connections
+            .iter()
+            .filter(|connection| connection.active && &connection.origin_id == origin_id)
+            .map(|connection| connection.destination_id.clone())
+            .collect()
+    }
+
     pub fn has_active_connection(
         &self,
         origin_id: &ConveyorId,
@@ -149,10 +159,10 @@ impl ConveyorNetwork {
                 return Some(route);
             }
 
-            for next in self.destinations(&current) {
+            for next in self.active_destinations(&current) {
                 if visited.insert(next.clone()) {
                     previous.insert(next.clone(), current.clone());
-                    pending.push_back(next.clone());
+                    pending.push_back(next);
                 }
             }
         }
