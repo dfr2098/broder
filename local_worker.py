@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import redis
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from backend.app.database import Base
 from backend.app.models import Item
 
 load_dotenv()
@@ -36,6 +37,7 @@ def process_task(task_data: str):
 
 def main():
     logger.info("Worker local iniciado")
+    Base.metadata.create_all(bind=engine)
     while True:
         task = redis_client.brpop(QUEUE_KEY, timeout=5)
         if task:
