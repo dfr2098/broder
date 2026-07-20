@@ -1,15 +1,33 @@
 import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
-from . import crud, models, schemas
+from . import crud, schemas
 from .database import SessionLocal, init_db
 
 load_dotenv()
 
-app = FastAPI(title="FastAPI Híbrido", version="1.0")
-app.add_event_handler("startup", init_db)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="FastAPI Híbrido", version="1.0", lifespan=lifespan)
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[FRONTEND_URL],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def get_db():
