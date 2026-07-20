@@ -1,5 +1,6 @@
 mod classes;
 mod config;
+mod dashboard;
 mod display;
 mod logger;
 mod persistence;
@@ -12,6 +13,7 @@ use std::time::Instant;
 
 use classes::load_class_names;
 use config::{parse_options, print_help};
+use dashboard::WebDashboard;
 use logger::Logger;
 use persistence::{PersistenceStartup, VisionEventPublisher};
 use security::redact_source;
@@ -63,6 +65,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         options.nms_threshold
     ))?;
 
+    let dashboard = options.web_bind.map(WebDashboard::start).transpose()?;
+    if let Some(dashboard) = &dashboard {
+        logger.info(format!(
+            "panel web activo: http://{}",
+            dashboard.local_addr()
+        ))?;
+    }
+
     let mut event_publisher = if let Some(database_url) = options.database_url.as_deref() {
         let (publisher, startup) =
             VisionEventPublisher::start(database_url, &options.source_id, options.persistence)?;
@@ -102,6 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut engine,
         spatial_model.as_ref(),
         event_publisher.as_mut(),
+        dashboard.as_ref(),
         &mut logger,
     )
 }

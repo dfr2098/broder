@@ -1,0 +1,46 @@
+version = 1
+
+[defaults]
+model = "core/yolo/models/yolo11n.onnx"
+fps = 5.0
+confidence = 0.25
+nms = 0.45
+reconnect_seconds = 5
+connect_timeout_seconds = 10
+frozen_stream_seconds = 15
+
+[[cameras]]
+id = "camera-1"
+enabled = true
+name = "Transportador de entrada"
+location = "Línea 1"
+ip = "192.168.10.101"
+rtsp_port = 554
+rtsp_path = "/Streaming/Channels/101"
+rtsp_url_env = "CAMERA_1_RTSP_URL"
+transport = "tcp"
+spatial_config = "core/vision/config/camera-1.spatial"
+
+[[cameras]]
+id = "camera-2"
+enabled = false
+name = "Transportador de salida"
+location = "Línea 1"
+ip = "192.168.10.102"
+rtsp_port = 554
+rtsp_path = "/Streaming/Channels/101"
+rtsp_url_env = "CAMERA_2_RTSP_URL"
+transport = "tcp"
+spatial_config = "core/vision/config/camera-2.spatial"
+
+[[cameras]]
+id = "camera-3"
+enabled = false
+name = "Zona de acumulación"
+location = "Línea 2"
+ip = "192.168.10.103"
+rtsp_port = 554
+rtsp_path = "/Streaming/Channels/101"
+rtsp_url_env = "CAMERA_3_RTSP_URL"
+transport = "tcp"
+spatial_config = "core/vision/config/camera-3.spatial"

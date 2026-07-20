@@ -361,9 +361,10 @@ Los núcleos Rust **no se ejecutan en contenedores**. Se compilan y ejecutan de
 forma nativa en el SP o equipo de planta para evitar sobrecarga y conservar
 acceso directo al hardware, red industrial y recursos locales.
 
-Las bases de datos sí se ejecutan en contenedores y se exponen al host mediante
-puertos configurados. Esta diferencia de despliegue no atraviesa el dominio:
-los núcleos continúan utilizando puertos y adaptadores abstractos.
+Las bases de datos y el visualizador Nginx sí se ejecutan en contenedores. El
+frontend reenvía el WebSocket al proceso nativo; esta diferencia de despliegue
+no atraviesa el dominio y los núcleos continúan utilizando puertos y adaptadores
+abstractos.
 
 ```mermaid
 flowchart LR
@@ -377,6 +378,7 @@ flowchart LR
         VC[vision-core]
         TC[tracking-core]
         SC[spatial-core]
+        WSB[Backend HTTP/WebSocket]
         Q[Cola acotada]
         PW[Worker de persistencia]
         PR[PersistenceRouter]
@@ -388,24 +390,34 @@ flowchart LR
         VIS --> VC
         VC --> TC
         TC --> SC
+        VIS -->|frame + detecciones + tracks + espacio| WSB
         VIS -->|VisionDetection normalizada| Q --> PW --> BUS
         BUS --> PR --> PGA
     end
 
     subgraph DOCKER[Contenedores de infraestructura]
         PG[(PostgreSQL)]
+        WEB[Visualizador Nginx]
         CH[(ClickHouse futuro)]
     end
 
     PGA -->|detección temporal actual| PG
     BUS -.->|adaptador histórico futuro| CH
+    WSB -->|HTTP/WebSocket :8081| WEB
+    WEB -->|HTTP :8088| BROWSER[Navegador local o de planta]
 ```
+
+El backend web actual es una salida operativa en vivo y no un consumidor durable
+del bus. Recibe el resultado compuesto dentro de `vision-inference`, distribuye
+los frames mediante un canal broadcast acotado y no consulta PostgreSQL. Nginx
+sirve los recursos estáticos y actúa como proxy WebSocket. Un dashboard
+histórico o multicámara continúa siendo una evolución futura.
 
 Flujo de operación del prototipo:
 
 ```text
-SP nativo:       binarios Rust
-Infraestructura: PostgreSQL en Docker Compose
+SP nativo:       binarios Rust y backend WebSocket
+Infraestructura: PostgreSQL y visualizador Nginx en Docker Compose
 Futuro:          ClickHouse en Docker Compose
 ```
 

@@ -7,6 +7,7 @@ video_source=${2:-}
 spatial_path=${3:-core/vision/config/camera-1.spatial}
 expected_db_port=${4:-5432}
 failures=0
+minimum_opencv_version=4.13.0
 
 ok() {
     echo "[OK] $1"
@@ -14,6 +15,10 @@ ok() {
 
 warn() {
     echo "[WARN] $1"
+}
+
+version_at_least() {
+    test "$(printf '%s\n' "$2" "$1" | sort -V | head -n 1)" = "$2"
 }
 
 fail() {
@@ -31,7 +36,11 @@ done
 
 if pkg-config --exists opencv4 2>/dev/null; then
     opencv_version=$(pkg-config --modversion opencv4)
-    ok "OpenCV local: $opencv_version"
+    if version_at_least "$opencv_version" "$minimum_opencv_version"; then
+        ok "OpenCV local: $opencv_version"
+    else
+        fail "OpenCV $opencv_version es anterior al mínimo $minimum_opencv_version requerido por YOLO11 ONNX"
+    fi
 else
     fail "pkg-config no encuentra OpenCV 4"
 fi

@@ -1,0 +1,4 @@
+# Archivos consumidos directamente por herramientas Unix/WSL.
+*.sh text eol=lf
+Makefile text eol=lf
+core/yolo/models/SHA256SUMS text eol=lf

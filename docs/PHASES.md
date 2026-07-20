@@ -99,8 +99,20 @@ Implementado:
 - consultas desde `make vision-query`;
 - posibilidad de desactivar persistencia con `--no-persistence`.
 
+Extensión operativa implementada:
+
+- visualizador web autocontenido servido por Nginx en Docker;
+- backend HTTP/WebSocket integrado en `vision-inference`;
+- actualización en vivo mediante WebSocket;
+- frames JPEG, detecciones, tracks, geometría espacial y métricas;
+- varios navegadores mediante un canal broadcast acotado;
+- endpoint de salud HTTP;
+- ejecución opcional e independiente de PostgreSQL.
+
 Límite actual: sólo se persisten detecciones. La cola vive en memoria y no
 sobrevive a una caída completa del proceso. No existe política de retención.
+El panel web no tiene autenticación, TLS, usuarios, permisos, histórico ni
+administración multicámara.
 
 ## Fuera del alcance actual
 
@@ -117,7 +129,7 @@ No están implementados:
 - bus durable como NATS, Kafka o Redis Streams;
 - persistencia de tracks, resultados espaciales o modelo operativo;
 - ClickHouse o TimescaleDB;
-- dashboard web, usuarios y permisos;
+- usuarios, permisos y dashboard histórico o multicámara;
 - reidentificación entre cámaras;
 - almacenamiento o compresión de video;
 - reproducción y reprocesamiento desde una interfaz de usuario;
@@ -134,7 +146,7 @@ Antes de implementar alarmas conviene cerrar, en este orden:
 5. cálculo de velocidad y dirección con tolerancias configurables;
 6. reglas de desalineación y permanencia;
 7. correlación con telegramas;
-8. generación de alarmas y dashboard.
+8. generación de alarmas y ampliación del dashboard operativo.
 
 Esta secuencia evita construir alertas sobre detecciones o mediciones todavía
 no calibradas.

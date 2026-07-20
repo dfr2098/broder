@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Little Brother · Visión en vivo</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07100f;
+      --panel: rgba(14, 29, 27, .86);
+      --panel-strong: #102724;
+      --line: rgba(159, 244, 202, .16);
+      --text: #e9fff5;
+      --muted: #8ca9a0;
+      --accent: #52efaa;
+      --cyan: #50d8e8;
+      --warn: #ffcf66;
+      --danger: #ff7188;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 14% 10%, rgba(45, 177, 124, .16), transparent 28rem),
+        radial-gradient(circle at 88% 88%, rgba(46, 135, 156, .14), transparent 32rem),
+        var(--bg);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .25;
+      background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, black, transparent 72%);
+    }
+    .shell { width: min(1520px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 44px; position: relative; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .mark { width: 42px; height: 42px; border: 1px solid rgba(82,239,170,.45); border-radius: 13px; display: grid; place-items: center; background: rgba(82,239,170,.08); box-shadow: 0 0 30px rgba(82,239,170,.08); }
+    .mark::before { content: ""; width: 16px; height: 16px; border: 2px solid var(--accent); border-radius: 50%; box-shadow: 0 0 0 5px rgba(82,239,170,.12); }
+    h1 { font-size: 18px; margin: 0; letter-spacing: .02em; }
+    .subtitle { color: var(--muted); font-size: 12px; margin-top: 3px; text-transform: uppercase; letter-spacing: .14em; }
+    .connection { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); padding: 9px 13px; border-radius: 999px; background: rgba(7,16,15,.7); font-size: 13px; color: var(--muted); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 12px currentColor; }
+    .connection.online .dot { background: var(--accent); }
+    .connection.online { color: var(--text); }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; }
+    .panel { border: 1px solid var(--line); background: var(--panel); border-radius: 20px; box-shadow: 0 28px 80px rgba(0,0,0,.28); backdrop-filter: blur(14px); }
+    .viewer { padding: 14px; overflow: hidden; }
+    .viewer-top { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 13px; color: var(--muted); font-size: 12px; }
+    .source { color: var(--text); font-weight: 650; }
+    .canvas-wrap { position: relative; overflow: hidden; border-radius: 13px; background: #020606; min-height: 340px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.04); }
+    canvas { display: block; width: 100%; height: auto; }
+    .empty { position: absolute; text-align: center; color: var(--muted); }
+    .empty strong { display: block; color: var(--text); font-size: 16px; margin-bottom: 6px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+    .stat { padding: 14px; border-radius: 13px; background: rgba(2,9,8,.62); border: 1px solid rgba(255,255,255,.05); }
+    .stat-label { color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .stat-value { font-size: 22px; font-weight: 720; margin-top: 6px; font-variant-numeric: tabular-nums; }
+    aside { display: flex; flex-direction: column; gap: 14px; }
+    .side-panel { padding: 18px; }
+    .panel-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .panel-title h2 { margin: 0; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+    .badge { color: var(--accent); background: rgba(82,239,170,.09); padding: 4px 8px; border-radius: 999px; font-size: 11px; }
+    .list { display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow: auto; }
+    .row { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px; border-radius: 11px; background: rgba(2,9,8,.55); border: 1px solid rgba(255,255,255,.045); }
+    .track-id { width: 34px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: rgba(80,216,232,.1); color: var(--cyan); font: 650 11px ui-monospace, monospace; }
+    .row strong { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row small { color: var(--muted); font-size: 10px; }
+    .confidence { color: var(--accent); font: 650 11px ui-monospace, monospace; }
+    .zones { display: flex; flex-wrap: wrap; gap: 7px; }
+    .zone { border: 1px solid rgba(255,207,102,.22); background: rgba(255,207,102,.07); color: var(--warn); padding: 7px 9px; border-radius: 9px; font-size: 11px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    footer { color: var(--muted); font-size: 11px; margin-top: 18px; display: flex; justify-content: space-between; }
+    @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } aside { display: grid; grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 680px) { .shell { width: min(100% - 20px, 1520px); padding-top: 16px; } header { align-items: flex-start; } .stats { grid-template-columns: 1fr 1fr; } aside { grid-template-columns: 1fr; } .canvas-wrap { min-height: 230px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand"><div class="mark"></div><div><h1>Little Brother</h1><div class="subtitle">Visión industrial en vivo</div></div></div>
+      <div id="connection" class="connection"><span class="dot"></span><span id="connectionText">Conectando</span></div>
+    </header>
+
+    <section class="layout">
+      <div class="panel viewer">
+        <div class="viewer-top"><span id="source" class="source">camera-1</span><span id="frameMeta">Esperando el primer frame</span></div>
+        <div class="canvas-wrap">
+          <canvas id="canvas" width="848" height="478"></canvas>
+          <div id="empty" class="empty"><strong>Flujo sin datos</strong>El panel se actualizará al recibir frames por WebSocket.</div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="stat-label">Detecciones</div><div id="detections" class="stat-value">0</div></div>
+          <div class="stat"><div class="stat-label">Tracks activos</div><div id="tracks" class="stat-value">0</div></div>
+          <div class="stat"><div class="stat-label">Inferencia</div><div id="inference" class="stat-value">—</div></div>
+          <div class="stat"><div class="stat-label">Frecuencia</div><div id="fps" class="stat-value">—</div></div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="panel side-panel">
+          <div class="panel-title"><h2>Objetos observados</h2><span id="objectCount" class="badge">0</span></div>
+          <div id="objects" class="list"><div class="muted">Sin detecciones todavía.</div></div>
+        </div>
+        <div class="panel side-panel">
+          <div class="panel-title"><h2>Zonas ocupadas</h2><span class="badge">espacial</span></div>
+          <div id="zones" class="zones"><span class="muted">Sin ocupación.</span></div>
+        </div>
+      </aside>
+    </section>
+    <footer><span>HTTP + WebSocket · procesamiento local</span><span id="clients">0 clientes</span></footer>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const context = canvas.getContext('2d');
+    const image = new Image();
+    let reconnectDelay = 500;
+    let latestFrame = null;
+
+    const colors = ['#52efaa', '#50d8e8', '#ffcf66', '#ff7188', '#c099ff'];
+    const setText = (id, value) => document.getElementById(id).textContent = value;
+    const shortTrack = id => id ? id.split(':').pop() : 'T?';
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(`${protocol}//${location.host}/ws`);
+      socket.onopen = () => {
+        reconnectDelay = 500;
+        document.getElementById('connection').classList.add('online');
+        setText('connectionText', 'En vivo');
+      };
+      socket.onmessage = event => {
+        const frame = JSON.parse(event.data);
+        if (frame.type !== 'frame') return;
+        latestFrame = frame;
+        image.onload = () => renderFrame(frame);
+        image.src = frame.image;
+      };
+      socket.onclose = () => {
+        document.getElementById('connection').classList.remove('online');
+        setText('connectionText', 'Reconectando');
+        setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 1.7, 5000);
+      };
+      socket.onerror = () => socket.close();
+    }
+
+    function renderFrame(frame) {
+      canvas.width = frame.width;
+      canvas.height = frame.height;
+      context.drawImage(image, 0, 0, frame.width, frame.height);
+      drawGeometry(frame.geometry, frame.width, frame.height);
+      drawDetections(frame.detections, frame.width, frame.height);
+      document.getElementById('empty').hidden = true;
+      setText('source', frame.source_id);
+      setText('frameMeta', `frame ${frame.frame_id} · ${(frame.timestamp_ms / 1000).toFixed(2)} s`);
+      setText('detections', frame.detections.length);
+      setText('tracks', frame.active_tracks.length);
+      setText('inference', `${frame.inference_ms.toFixed(0)} ms`);
+      setText('fps', `${frame.processing_fps.toFixed(1)} FPS`);
+      setText('clients', `${frame.browser_clients} cliente${frame.browser_clients === 1 ? '' : 's'}`);
+      renderObjects(frame.detections);
+      renderZones(frame.detections);
+    }
+
+    function drawGeometry(geometry, width, height) {
+      if (!geometry) return;
+      drawPolygon(geometry.observation_region, width, height, 'rgba(255,255,255,.52)', [7, 5]);
+      geometry.zones.forEach((zone, index) => drawPolygon(zone.points, width, height, colors[(index + 1) % colors.length], [4, 4]));
+      geometry.lines.forEach((line, index) => {
+        context.save();
+        context.strokeStyle = line.role === 'exit' ? '#ff7188' : '#ffcf66';
+        context.lineWidth = 2;
+        context.beginPath();
+        context.moveTo(line.start.x * width, line.start.y * height);
+        context.lineTo(line.end.x * width, line.end.y * height);
+        context.stroke();
+        context.restore();
+      });
+    }
+
+    function drawPolygon(points, width, height, color, dash) {
+      if (!points?.length) return;
+      context.save();
+      context.strokeStyle = color;
+      context.lineWidth = 1.5;
+      context.setLineDash(dash);
+      context.beginPath();
+      points.forEach((point, index) => {
+        const method = index ? 'lineTo' : 'moveTo';
+        context[method](point.x * width, point.y * height);
+      });
+      context.closePath();
+      context.stroke();
+      context.restore();
+    }
+
+    function drawDetections(detections, width, height) {
+      detections.forEach((detection, index) => {
+        const color = colors[index % colors.length];
+        const x = detection.x * width;
+        const y = detection.y * height;
+        const boxWidth = detection.width * width;
+        const boxHeight = detection.height * height;
+        const label = `${shortTrack(detection.track_id)} ${detection.class_name} ${Math.round(detection.confidence * 100)}%`;
+        context.save();
+        context.strokeStyle = color;
+        context.lineWidth = 2;
+        context.strokeRect(x, y, boxWidth, boxHeight);
+        context.font = '600 12px ui-monospace, monospace';
+        const labelWidth = context.measureText(label).width + 12;
+        context.fillStyle = color;
+        context.fillRect(x, Math.max(0, y - 23), labelWidth, 23);
+        context.fillStyle = '#06100e';
+        context.fillText(label, x + 6, Math.max(15, y - 7));
+        context.restore();
+      });
+    }
+
+    function renderObjects(detections) {
+      const container = document.getElementById('objects');
+      setText('objectCount', detections.length);
+      if (!detections.length) { container.innerHTML = '<div class="muted">Sin detecciones en este frame.</div>'; return; }
+      container.replaceChildren(...detections.map(detection => {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const id = document.createElement('span');
+        id.className = 'track-id';
+        id.textContent = shortTrack(detection.track_id).replace(/^0+/, '') || '0';
+        const info = document.createElement('div');
+        const name = document.createElement('strong');
+        name.textContent = detection.class_name;
+        const detail = document.createElement('small');
+        detail.textContent = detection.zones.at(-1) || detection.track_state || 'sin zona';
+        info.append(name, detail);
+        const confidence = document.createElement('span');
+        confidence.className = 'confidence';
+        confidence.textContent = `${Math.round(detection.confidence * 100)}%`;
+        row.append(id, info, confidence);
+        return row;
+      }));
+    }
+
+    function renderZones(detections) {
+      const names = [...new Set(detections.flatMap(item => item.zones))];
+      const container = document.getElementById('zones');
+      if (!names.length) { container.innerHTML = '<span class="muted">Sin ocupación.</span>'; return; }
+      container.replaceChildren(...names.map(name => {
+        const zone = document.createElement('span');
+        zone.className = 'zone';
+        zone.textContent = name;
+        return zone;
+      }));
+    }
+
+    window.addEventListener('resize', () => latestFrame && image.complete && renderFrame(latestFrame));
+    connect();
+  </script>
+</body>
+</html>

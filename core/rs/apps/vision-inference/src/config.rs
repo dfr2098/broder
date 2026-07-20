@@ -1,5 +1,6 @@
 use std::env;
 use std::fmt::{self, Display};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use tracking_core::TrackerConfig;
@@ -51,6 +52,8 @@ pub(crate) struct Options {
     pub confidence_threshold: f32,
     pub nms_threshold: f32,
     pub display: bool,
+    pub loop_video: bool,
+    pub web_bind: Option<SocketAddr>,
     pub max_inferences: Option<u64>,
     pub tracker_config: TrackerConfig,
 }
@@ -75,6 +78,8 @@ pub(crate) fn parse_options() -> Result<Options, String> {
     let mut confidence_threshold = DEFAULT_CONFIDENCE;
     let mut nms_threshold = DEFAULT_NMS;
     let mut display = false;
+    let mut loop_video = false;
+    let mut web_bind = None;
     let mut max_inferences = None;
     let mut tracker_config = TrackerConfig::default();
     let mut args = env::args().skip(1);
@@ -168,6 +173,15 @@ pub(crate) fn parse_options() -> Result<Options, String> {
                         .map_err(|_| "--track-max-distance debe ser numérico".to_owned())?;
             }
             "--display" => display = true,
+            "--loop-video" => loop_video = true,
+            "--web-bind" => {
+                let value = next_value(&mut args, "--web-bind")?;
+                web_bind = Some(
+                    value
+                        .parse::<SocketAddr>()
+                        .map_err(|_| format!("dirección web inválida: {value}"))?,
+                );
+            }
             "--help" | "-h" => {
                 print_help();
                 std::process::exit(0);
@@ -215,6 +229,8 @@ pub(crate) fn parse_options() -> Result<Options, String> {
         confidence_threshold,
         nms_threshold,
         display,
+        loop_video,
+        web_bind,
         max_inferences,
         tracker_config,
     })
@@ -253,6 +269,8 @@ pub(crate) fn print_help() {
            --nms 0.45              Umbral IoU para NMS por clase\n\
            --log RUTA              Log de detecciones normalizadas\n\
            --display               Mostrar cajas en una ventana\n\
+           --loop-video            Reiniciar un archivo al llegar al final\n\
+           --web-bind IP:PUERTO    Panel HTTP/WebSocket opcional\n\
            --max-inferences N      Detener una prueba después de N inferencias\n\
            --track-min-hits 2      Observaciones para confirmar un track\n\
            --track-max-missed 5   Pérdidas consecutivas toleradas\n\

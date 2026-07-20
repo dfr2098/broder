@@ -4,16 +4,22 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+axum = { version = "0.8", features = ["ws"] }
+base64 = "0.22"
 event-core = { path = "../../crates/event-core" }
 persistence-core = { path = "../../crates/persistence-core" }
 persistence-postgres = { path = "../../crates/persistence-postgres" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 spatial-core = { path = "../../crates/spatial-core" }
+tokio = { version = "1", features = ["macros", "net", "rt", "sync"] }
 tracking-core = { path = "../../crates/tracking-core" }
 vision-core = { path = "../../crates/vision-core" }
 opencv = { version = "0.99", default-features = false, features = [
     "clang-runtime",
     "dnn",
     "highgui",
+    "imgcodecs",
     "imgproc",
     "videoio",
 ] }

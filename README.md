@@ -9,6 +9,7 @@ Permanece independiente de PLC, WMS y fabricantes específicos.
 
 La guía completa comienza en [`docs/README.md`](docs/README.md):
 
+- [diagramas de flujo](docs/FLOWS.md);
 - [instalación](docs/INSTALLATION.md);
 - [operación y diagnóstico](docs/OPERATIONS.md);
 - [modelo de datos](docs/DATA_MODEL.md);
@@ -33,8 +34,10 @@ docker-compose.yml               PostgreSQL de infraestructura
 ```
 
 Los procesos Rust se ejecutan directamente en el SP o equipo de planta.
-PostgreSQL se ejecuta en un contenedor y se conecta al proceso mediante el bus
-de eventos y `PersistenceRouter`; los núcleos visuales no conocen SQL.
+PostgreSQL y el visualizador Nginx se ejecutan en contenedores. PostgreSQL se
+conecta al proceso mediante el bus de eventos y `PersistenceRouter`; el panel
+recibe los WebSockets mediante un proxy hacia `vision-inference`. Los núcleos
+visuales no conocen SQL ni Nginx.
 
 ## Comprobar el proyecto
 
@@ -92,6 +95,17 @@ Ejecutar el motor a 5 FPS y mostrar las detecciones:
 ```bash
 make vision
 ```
+
+Construir el contenedor del panel y reproducir el video de demostración:
+
+```bash
+make demo-web
+```
+
+Después abra `http://127.0.0.1:8088`. El comando utiliza exclusivamente el MP4
+incluido en `video prueba/`; el panel muestra el video, cajas, identificadores
+de track, zonas y métricas sin requerir PostgreSQL. El MP4 se repite hasta que
+el usuario detiene el motor con `Ctrl+C`.
 
 Ejecutarlo sin ventana o realizar una prueba corta de seis inferencias:
 

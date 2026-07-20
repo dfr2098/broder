@@ -12,6 +12,7 @@ use tracking_core::{MultiObjectTracker, TrackingUpdate, VisionTrack};
 use vision_core::{FrameSampler, VisionDetection};
 
 use crate::config::Options;
+use crate::dashboard::WebDashboard;
 use crate::display::{DisplayContext, draw_detections};
 use crate::logger::Logger;
 use crate::persistence::VisionEventPublisher;
@@ -25,6 +26,7 @@ pub(crate) fn run_stream(
     engine: &mut YoloEngine,
     spatial_model: Option<&CameraSpatialModel>,
     event_publisher: Option<&mut VisionEventPublisher>,
+    dashboard: Option<&WebDashboard>,
     logger: &mut Logger,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut capture = VideoCapture::from_file(&options.source, videoio::CAP_ANY)?;
@@ -64,9 +66,27 @@ pub(crate) fn run_stream(
     let mut maximum_inference_ms = 0.0_f64;
     let mut event_publisher = event_publisher;
     let mut last_persistence_metrics = Instant::now();
+    let mut completed_loops = 0_u64;
 
     loop {
         if !capture.read(&mut frame)? || frame.empty() {
+            if options.loop_video && !is_live {
+                let finished_tracks = tracker.finish_all();
+                finished_track_count += finished_tracks.len() as u64;
+                for track in &finished_tracks {
+                    log_finished_track(logger, track)?;
+                }
+                if !capture.set(videoio::CAP_PROP_POS_FRAMES, 0.0)? {
+                    return Err("OpenCV no pudo reiniciar el video".into());
+                }
+                sampler = FrameSampler::new(options.processing_fps)?;
+                tracker = MultiObjectTracker::new(&options.source_id, options.tracker_config)?;
+                completed_loops += 1;
+                logger.info(format!(
+                    "reiniciando video de demostración: vuelta={completed_loops}"
+                ))?;
+                continue;
+            }
             logger.info("fin del flujo")?;
             break;
         }
@@ -78,6 +98,7 @@ pub(crate) fn run_stream(
         let timestamp_ms = source_timestamp_ms(
             &capture,
             is_live,
+            options.loop_video,
             captured_frames,
             source_fps,
             stream_started,
@@ -125,6 +146,22 @@ pub(crate) fn run_stream(
         let spatial_tracks =
             locate_updated_tracks(spatial_model, &tracking, tracker.active_tracks())?;
         log_spatial_tracks(logger, &spatial_tracks)?;
+
+        if let Some(dashboard) = dashboard {
+            dashboard.publish_frame(
+                &frame,
+                &options.source_id,
+                frame_id,
+                timestamp_ms,
+                inference_ms,
+                options.processing_fps,
+                &detections,
+                &tracking.assignments,
+                tracker.active_tracks(),
+                &spatial_tracks,
+                spatial_model,
+            )?;
+        }
 
         if options.display {
             draw_detections(
@@ -234,12 +271,17 @@ fn remaining_cycle_time(started: Instant, processing_fps: f64, is_live: bool) ->
 fn source_timestamp_ms(
     capture: &VideoCapture,
     is_live: bool,
+    loop_video: bool,
     captured_frames: u64,
     source_fps: f64,
     started: Instant,
 ) -> opencv::Result<u64> {
     if is_live {
         return Ok(started.elapsed().as_millis() as u64);
+    }
+
+    if loop_video && source_fps.is_finite() && source_fps > 0.0 {
+        return Ok((((captured_frames - 1) as f64 / source_fps) * 1_000.0).round() as u64);
     }
 
     let media_time = capture.get(videoio::CAP_PROP_POS_MSEC)?;

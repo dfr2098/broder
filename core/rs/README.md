@@ -87,10 +87,16 @@ apps/vision-inference/src/
 ├── yolo.rs             OpenCV DNN, preproceso y decodificación
 ├── stream.rs           captura, muestreo y tracking
 ├── display.rs          cajas, etiquetas y track_id
+├── dashboard.rs        servidor HTTP/WebSocket y contrato del panel
 ├── spatial_config.rs   carga de geometría de cámara
 ├── persistence.rs      cola, worker, bus y composición del router
 ├── security.rs         redacción de credenciales RTSP
 └── logger.rs           consola y archivo
+
+apps/vision-inference/web/
+├── index.html           panel web autocontenido y canvas en vivo
+├── nginx.conf           proxy HTTP/WebSocket hacia el motor nativo
+└── Dockerfile           imagen del visualizador Nginx
 
 apps/video-viewer/src/
 ├── main.rs             composición del visor

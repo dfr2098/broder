@@ -62,6 +62,16 @@ make doctor DB_PORT=55432
 
 ## Visor provisional
 
+El video local configurado de manera predeterminada es:
+
+```text
+video prueba/WhatsApp Video 2026-07-20 at 10.07.07 AM.mp4
+```
+
+Es un MP4 de aproximadamente 1.9 MB y 14 segundos. La carpeta `video prueba/`
+está excluida de Git, por lo que cada instalación debe copiar este archivo o
+indicar otra fuente mediante `VIDEO="ruta/al/video.mp4"`.
+
 Mostrar el video a 5 FPS:
 
 ```bash
@@ -72,6 +82,12 @@ Obtener metadatos sin abrir ventana:
 
 ```bash
 make viewer-info
+```
+
+Para validar explícitamente otro archivo:
+
+```bash
+make viewer-info VIDEO="ruta/al/video.mp4"
 ```
 
 Controles:
@@ -109,10 +125,93 @@ Prueba corta de seis inferencias:
 make vision-smoke
 ```
 
+Si PostgreSQL todavía no está disponible y solo se quiere comprobar el video y
+el motor, se puede permitir que la prueba continúe sin conexión:
+
+```bash
+make vision-smoke PERSISTENCE_MODE=best-effort
+```
+
+La prueba requiere OpenCV 4 y el archivo
+`core/yolo/models/yolo11n.onnx`. `make doctor` informa si falta alguno de estos
+recursos antes de iniciar la inferencia.
+
 Seguir los logs desde otra terminal:
 
 ```bash
 make vision-logs
+```
+
+## Panel web por WebSocket
+
+El visualizador se ejecuta en un contenedor Nginx. Sirve la interfaz y hace
+proxy de `/ws` y `/health` hacia el backend nativo de `vision-inference`, que
+transmite cada frame procesado como JPEG junto con detecciones, tracking, zonas
+y métricas. El flujo no consulta PostgreSQL.
+
+Iniciar la demostración local con el video incluido:
+
+```bash
+make demo-web
+```
+
+Este comando construye e inicia `little-brother-web` y después ejecuta el motor
+Rust nativo exclusivamente con el MP4 de `video prueba/`. Al detener el motor,
+el contenedor permanece disponible. El video vuelve al inicio automáticamente
+hasta que se presiona `Ctrl+C`. Gestión independiente del visualizador:
+
+```bash
+make web-up
+make web-logs
+make web-down
+```
+
+Abrir en el navegador:
+
+```text
+http://127.0.0.1:8088
+```
+
+Rutas disponibles:
+
+| Ruta | Función |
+|---|---|
+| `/` | Interfaz de visualización |
+| `/ws` | Flujo WebSocket de frames y metadatos |
+| `/health` | Estado HTTP y cantidad de clientes conectados |
+
+El comando `demo-web` utiliza `--no-persistence` para que la demostración no
+dependa de PostgreSQL. Para combinar el panel con persistencia se puede
+ejecutar directamente `vision-inference` con `--web-bind` y la configuración
+normal de base de datos.
+
+Puertos predeterminados:
+
+| Componente | Dirección |
+|---|---|
+| Visualizador Nginx en Docker | `127.0.0.1:8088` |
+| Backend HTTP/WebSocket nativo | `0.0.0.0:8081` |
+
+Para escuchar en todas las interfaces de red:
+
+```bash
+make vision-web WEB_HOST="0.0.0.0" WEB_PORT=8088
+```
+
+> **Seguridad:** esta primera versión no implementa autenticación ni TLS. No
+> exponga `0.0.0.0:8088` fuera de una red de planta controlada. Para acceso
+> remoto se debe colocar un proxy autenticado con HTTPS delante del servicio.
+
+El mensaje WebSocket `frame` contiene:
+
+```text
+source_id / frame_id / timestamp_ms
+image              JPEG como data URL
+width / height
+inference_ms / processing_fps / browser_clients
+detections[]       clase, confianza, caja, track_id, estado y zonas
+active_tracks[]    identidad, clase, estado y observaciones
+geometry           región útil, polígonos de zona y líneas virtuales
 ```
 
 ### Opciones directas de vision-inference
@@ -135,6 +234,8 @@ cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- --help
 | `--nms N` | IoU de NMS entre 0 y 1 |
 | `--log RUTA` | Archivo de log |
 | `--display` | Abre la ventana de visualización |
+| `--loop-video` | Repite continuamente una fuente de archivo |
+| `--web-bind IP:PUERTO` | Sirve el panel HTTP/WebSocket |
 | `--max-inferences N` | Finaliza después de N inferencias |
 | `--track-min-hits N` | Observaciones para confirmar identidad |
 | `--track-max-missed N` | Pérdidas consecutivas toleradas |
@@ -178,6 +279,42 @@ cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- \
 ```
 
 ## Cámara RTSP
+
+### Inventario de múltiples cámaras
+
+El archivo [`core/vision/config/cameras.toml`](../core/vision/config/cameras.toml)
+centraliza las IP y los parámetros operativos de todas las cámaras. Cada bloque
+`[[cameras]]` define una fuente con un `id` único y estable.
+
+```toml
+[[cameras]]
+id = "camera-1"
+enabled = true
+name = "Transportador de entrada"
+location = "Línea 1"
+ip = "192.168.10.101"
+rtsp_port = 554
+rtsp_path = "/Streaming/Channels/101"
+rtsp_url_env = "CAMERA_1_RTSP_URL"
+transport = "tcp"
+spatial_config = "core/vision/config/camera-1.spatial"
+```
+
+La dirección completa, incluyendo usuario y contraseña, se configura en el
+archivo local `.env`, que está excluido de Git:
+
+```dotenv
+CAMERA_1_RTSP_URL=rtsp://usuario:contrasena@192.168.10.101:554/Streaming/Channels/101
+```
+
+No se deben guardar credenciales reales en `cameras.toml`. Para incorporar una
+cámara se copia un bloque, se asignan un `id`, una IP y una variable de entorno
+únicos, y se crea su archivo `.spatial`. Una cámara con `enabled = false`
+permanece inventariada, pero no debe ser iniciada por el supervisor.
+
+> El motor actual ejecuta una fuente por proceso. `cameras.toml` establece el
+> contrato para el futuro supervisor multi-cámara; cada proceso debe recibir el
+> RTSP, `id` y archivo espacial del bloque correspondiente.
 
 ```bash
 make vision \

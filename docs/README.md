@@ -5,6 +5,8 @@ marcadas como futuras no forman parte del ejecutable actual.
 
 ## Mapa de documentos
 
+- [Diagramas de flujo](FLOWS.md): recorrido general, inicialización,
+  procesamiento por frame, tracking, análisis espacial, persistencia y cierre.
 - [Instalación](INSTALLATION.md): requisitos del SP, OpenCV, Rust, modelo ONNX
   y PostgreSQL.
 - [Operación](OPERATIONS.md): comandos, configuración, logs, RTSP, visor,
@@ -22,27 +24,24 @@ marcadas como futuras no forman parte del ejecutable actual.
 
 ## Estado resumido
 
-```text
-Archivo / RTSP
-      ↓
-OpenCV VideoCapture
-      ↓
-Muestreador de 5 FPS
-      ↓
-YOLO 11 ONNX + OpenCV DNN
-      ↓
-VisionDetection
-      ├──→ Tracking → VisionTrack
-      │                  ↓
-      │            Modelo espacial → SpatialTrack
-      │
-      └──→ EventEnvelope → Bus → PersistenceRouter
-                                      ↓
-                              PostgreSQL temporal
+```mermaid
+flowchart TD
+    SRC[Archivo o RTSP] --> CAP[OpenCV VideoCapture]
+    CAP --> SAMPLE[Muestreador de 5 FPS]
+    SAMPLE --> YOLO[YOLO 11 ONNX con OpenCV DNN]
+    YOLO --> DET[VisionDetection]
+    DET --> TRACK[Tracking]
+    TRACK --> SPATIAL[Modelo espacial]
+    DET --> EVENT[EventEnvelope]
+    EVENT --> BUS[Bus y PersistenceRouter]
+    BUS --> PG[(PostgreSQL temporal)]
 ```
 
-El proceso Rust se ejecuta directamente en el SP. Solamente PostgreSQL se
-ejecuta en contenedor.
+La explicación paso a paso y los flujos alternativos están en
+[Diagramas de flujo](FLOWS.md).
+
+El proceso Rust se ejecuta directamente en el SP. PostgreSQL y el visualizador
+web Nginx se ejecutan en contenedores separados.
 
 ## Inicio rápido
 
