@@ -34,6 +34,10 @@ La separación completa y la estrategia de persistencia están descritas en
 
 ## Verificación
 
+Los crates usan `edition = "2024"`, por lo que se requiere Rust 1.85 o
+superior. La versión se fija automáticamente mediante `rust-toolchain.toml`
+(si usas `rustup`, se descargará el toolchain necesario al ejecutar `cargo`).
+
 ```bash
 cd core/rs
 cargo test --workspace
