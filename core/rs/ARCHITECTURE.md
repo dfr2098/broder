@@ -69,7 +69,8 @@ Solo define puertos; no contiene SQL ni depende de un motor concreto.
 
 Es el adaptador de infraestructura que entrega `EventEnvelope` a Jaiba
 (`DMA_JAIVA`) por HTTP ingest. No conoce drivers, credenciales ni motores de
-base de datos; Jaiba bufferiza y enruta. Ningún núcleo funcional depende de
+base de datos; Jaiba bufferiza y enruta solo a ClickHouse (histórico) y
+PostgreSQL (configuración / estado). Ningún núcleo funcional depende de
 este crate.
 
 ### `vision-core`
@@ -273,8 +274,8 @@ alarmas y reglas industriales permanecen fuera de su alcance.
 
 ```text
 Actual: Broder → Jaiba (fire-and-forget) para VisionDetection
-Siguiente: Jaiba enruta histórico/config/hot según política
-Escala: ClickHouse histórico + consumidores analíticos detrás de Jaiba
+Siguiente: Jaiba enruta histórico→ClickHouse y config→PostgreSQL
+Escala: consumidores analíticos sobre ClickHouse detrás de Jaiba
 ```
 
 El cambio de fase solo reemplaza o agrega implementaciones de
@@ -297,8 +298,8 @@ flowchart TD
     GRA -->|Sí| GRAW[Relational writer]
 
     OPW --> PG[(PostgreSQL)]
-    HISW --> TS[(Jaiba → ClickHouse / otros)]
-    GRAW --> GRAPH[(PostgreSQL / grafo futuro)]
+    HISW --> TS[(Jaiba → ClickHouse)]
+    GRAW --> GRAPH[(Jaiba → PostgreSQL)]
 
     OP -->|No| END[Sin escritura en ese dominio]
     HIS -->|No| END

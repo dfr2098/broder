@@ -1,7 +1,7 @@
 //! Enrutamiento de persistencia sin dependencias de motores de base de datos.
 //!
-//! Broder entrega eventos a Jaiba (`jaiba-bridge`). Los motores (ClickHouse,
-//! PostgreSQL, etc.) viven detrás de Jaiba, nunca dentro de los núcleos.
+//! Broder entrega eventos a Jaiba (`jaiba-bridge`). Detrás de Jaiba solo
+//! ClickHouse (histórico) y PostgreSQL (configuración / estado).
 
 use std::error::Error;
 use std::fmt::{self, Display};

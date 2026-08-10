@@ -1,20 +1,25 @@
 # Flow de referencia para DMA_JAIVA.
 # Broder NO ejecuta este YAML: solo POSTea EventEnvelope al ingest.
-# Jaiba recibe, bufferiza y decide el destino (ClickHouse recomendado
-# para histórico de visión; PostgreSQL para configuración; etc.).
+# Jaiba recibe, bufferiza y persiste solo a:
+#   - ClickHouse  → histórico de visión
+#   - PostgreSQL  → configuración / estado
+# No hay Oracle ni otros destinos.
 
 id: broder-vision-ingest
 
 # El endpoint /api/v1/ingest/events (lab DMA_JAIVA) debe:
 #   1. aceptar el JSON de broder con 202 Accepted
 #   2. encolar paquetes sin bloquear al productor
-#   3. persistir por lotes hacia el motor histórico elegido
+#   3. escribir histórico en ClickHouse y config/estado en PostgreSQL
 
 database_connections:
   vision_history:
     type: clickhouse
     # Credenciales solo en Jaiba / Connection Manager — nunca en Broder.
     connection: clickhouse_dma
+  vision_config:
+    type: postgres
+    connection: postgres_dma
 
 engine:
   queue_capacity: 1024
@@ -28,8 +33,9 @@ processors:
     config:
       records:
         - info: "Sustituir por el consumer del ingest HTTP de Broder."
-          target: temporal.vision_detection
-          engine: clickhouse
+          history_target: temporal.vision_detection
+          history_engine: clickhouse
+          config_engine: postgres
 
 connections:
   - from: note
