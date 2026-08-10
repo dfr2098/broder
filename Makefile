@@ -4,7 +4,17 @@
 
 export CCACHE_DISABLE := 1
 DMA_JAIVA ?= http://127.0.0.1:19090
-export DMA_JAIVA
+CLICKHOUSE_DATABASE ?= temporal
+CLICKHOUSE_USER ?= default
+CLICKHOUSE_PASSWORD ?=
+CLICKHOUSE_HTTP_PORT ?= 8123
+CLICKHOUSE_NATIVE_PORT ?= 9000
+POSTGRES_DB ?= little_brother
+POSTGRES_USER ?= little_brother
+POSTGRES_PASSWORD ?= change-me
+DB_PORT ?= 5432
+export DMA_JAIVA CLICKHOUSE_DATABASE CLICKHOUSE_USER CLICKHOUSE_PASSWORD CLICKHOUSE_HTTP_PORT CLICKHOUSE_NATIVE_PORT
+export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD DB_PORT
 
 OPENCV_VERSION ?= 4.13.0
 OPENCV_LOCAL_PREFIX ?= $(HOME)/.local/opencv-$(OPENCV_VERSION)
@@ -89,8 +99,10 @@ vision-logs:
 	tail -n 100 -F "$(VISION_LOG)"
 
 vision-query:
-	@echo "Broder no consulta bases de datos. Use Jaiba / DMA_JAIVA para leer histórico."
-	@echo "DMA_JAIVA=$${DMA_JAIVA:-no configurada}"
+	@echo "Histórico (ClickHouse local; Jaiba es quien escribe en planta):"
+	curl -sS "http://127.0.0.1:$${CLICKHOUSE_HTTP_PORT:-8123}/?database=$${CLICKHOUSE_DATABASE:-temporal}" \
+		--user "$${CLICKHOUSE_USER:-default}:$${CLICKHOUSE_PASSWORD:-}" \
+		--data-binary "SELECT * FROM temporal.vision_detection ORDER BY occurred_at DESC LIMIT 20 FORMAT PrettyCompact"
 
 verify-model:
 	cd core/yolo/models && sha256sum -c SHA256SUMS
@@ -109,14 +121,13 @@ web-logs:
 	docker compose logs -f web
 
 infra-up:
-	@echo "Broder ya no levanta bases de datos. Arranque Jaiba desde DMA_JAIVA."
-	@echo "Opcional: make web-up"
+	docker compose up -d clickhouse db
 
 infra-down:
 	docker compose down
 
 infra-logs:
-	docker compose logs -f web
+	docker compose logs -f clickhouse db
 
 infra-reset:
 	docker compose down -v

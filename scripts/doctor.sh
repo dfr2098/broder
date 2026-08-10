@@ -85,6 +85,29 @@ else
     warn "DMA_JAIVA no está definida; Broder no entregará eventos"
 fi
 
+ch_port=$(docker compose port clickhouse 8123 2>/dev/null || true)
+if test -z "$ch_port"; then
+    warn "ClickHouse local no está iniciado; use make infra-up"
+else
+    actual_ch=${ch_port##*:}
+    if curl -fsS "http://127.0.0.1:${actual_ch}/ping" >/dev/null 2>&1; then
+        ok "ClickHouse HTTP /ping en $actual_ch"
+    else
+        fail "ClickHouse publicado en $actual_ch pero /ping falla"
+    fi
+fi
+
+pg_port=$(docker compose port db 5432 2>/dev/null || true)
+if test -z "$pg_port"; then
+    warn "PostgreSQL local no está iniciado; use make infra-up"
+else
+    if docker compose exec -T db pg_isready -U "${POSTGRES_USER:-little_brother}" -d "${POSTGRES_DB:-little_brother}" >/dev/null 2>&1; then
+        ok "PostgreSQL acepta conexiones"
+    else
+        fail "PostgreSQL no está listo"
+    fi
+fi
+
 if test "$failures" -eq 0; then
     echo "Diagnóstico completado sin errores."
 else

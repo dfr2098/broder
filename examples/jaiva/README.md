@@ -17,6 +17,9 @@ JAIBA  (DMA_JAIVA)
 
 No se envía nada a Oracle ni a otras bases.
 
+Infra local de Broder (`make infra-up`): contenedores **ClickHouse** + **PostgreSQL**
+para que Jaiba los use. Broder sigue sin abrir drivers: solo habla con `DMA_JAIVA`.
+
 ## Contrato HTTP (Broder → Jaiba)
 
 `POST {DMA_JAIVA}/api/v1/ingest/events`
