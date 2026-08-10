@@ -1,7 +1,7 @@
 //! Enrutamiento de persistencia sin dependencias de motores de base de datos.
 //!
-//! ClickHouse (vía gateway Jaiva / `DMA_JAIVA`) u otros motores se implementan
-//! como adaptadores de `PersistenceWriter`, fuera de los núcleos funcionales.
+//! Broder entrega eventos a Jaiba (`jaiba-bridge`). Los motores (ClickHouse,
+//! PostgreSQL, etc.) viven detrás de Jaiba, nunca dentro de los núcleos.
 
 use std::error::Error;
 use std::fmt::{self, Display};

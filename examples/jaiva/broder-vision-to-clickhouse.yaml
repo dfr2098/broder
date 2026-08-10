@@ -1,24 +1,24 @@
-# Flow de referencia para el lab DMA_JAIVA.
-# Little Brother envía detecciones por HTTP ClickHouse al gateway Jaiva
-# (`DMA_JAIVA`). Este YAML documenta el destino equivalente cuando Jaiva
-# orquesta la escritura con un adaptador ClickHouse / put_database.
-#
-# Uso en DMA_JAIVA:
-#   1. Exponer el HTTP de ClickHouse detrás de Jaiva.
-#   2. Exportar DMA_JAIVA=http://<jaiva-gateway>:8123 (o el puerto del proxy).
-#   3. Arrancar vision-inference sin PostgreSQL.
+# Flow de referencia para DMA_JAIVA.
+# Broder NO ejecuta este YAML: solo POSTea EventEnvelope al ingest.
+# Jaiba recibe, bufferiza y decide el destino (ClickHouse recomendado
+# para histórico de visión; PostgreSQL para configuración; etc.).
 
-id: broder-vision-detection-clickhouse
+id: broder-vision-ingest
+
+# El endpoint /api/v1/ingest/events (lab DMA_JAIVA) debe:
+#   1. aceptar el JSON de broder con 202 Accepted
+#   2. encolar paquetes sin bloquear al productor
+#   3. persistir por lotes hacia el motor histórico elegido
 
 database_connections:
-  clickhouse:
+  vision_history:
     type: clickhouse
-    url_env: DMA_JAIVA
-    max_connections: 4
+    # Credenciales solo en Jaiba / Connection Manager — nunca en Broder.
+    connection: clickhouse_dma
 
 engine:
-  queue_capacity: 256
-  max_concurrency: 2
+  queue_capacity: 1024
+  max_concurrency: 4
   memory:
     maximum_percent: 42
 
@@ -27,8 +27,9 @@ processors:
     type: generate_records
     config:
       records:
-        - info: "Las detecciones las inserta broder vía DMA_JAIVA (HTTP ClickHouse)."
-          table: temporal.vision_detection
+        - info: "Sustituir por el consumer del ingest HTTP de Broder."
+          target: temporal.vision_detection
+          engine: clickhouse
 
 connections:
   - from: note

@@ -66,15 +66,10 @@ pub(crate) fn parse_options() -> Result<Options, String> {
     let mut spatial_config = None;
     let mut dma_jaiva_url = env::var("DMA_JAIVA")
         .ok()
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| {
-            env::var("CLICKHOUSE_URL")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        });
+        .filter(|value| !value.trim().is_empty());
     let mut log_path = PathBuf::from(DEFAULT_LOG);
     let mut persistence = PersistenceConfig {
-        mode: PersistenceMode::Required,
+        mode: PersistenceMode::BestEffort,
         queue_capacity: DEFAULT_PERSISTENCE_QUEUE,
         batch_size: DEFAULT_PERSISTENCE_BATCH,
         flush_interval_ms: DEFAULT_PERSISTENCE_FLUSH_MS,
@@ -101,7 +96,7 @@ pub(crate) fn parse_options() -> Result<Options, String> {
                 dma_jaiva_url = Some(next_value(&mut args, "--dma-jaiva")?);
             }
             "--database-url" => {
-                // Alias legado: ahora es el gateway Jaiva→ClickHouse (DMA_JAIVA).
+                // Alias legado: ahora es la base URL de Jaiba (DMA_JAIVA).
                 dma_jaiva_url = Some(next_value(&mut args, "--database-url")?);
             }
             "--no-persistence" => dma_jaiva_url = None,
@@ -266,9 +261,9 @@ pub(crate) fn print_help() {
            --model RUTA            Modelo YOLO 11 ONNX\n\
            --classes RUTA          Una clase por línea (predeterminado: COCO)\n\
            --spatial-config RUTA   Geometría normalizada de la cámara\n\
-           --dma-jaiva URL         Gateway Jaiva→ClickHouse (o variable DMA_JAIVA)\n\
-           --no-persistence        Ejecutar sin guardar detecciones\n\
-           --persistence-mode MODO required | best-effort\n\
+           --dma-jaiva URL         Servidor Jaiba (o variable DMA_JAIVA)\n\
+           --no-persistence        Ejecutar sin entregar eventos a Jaiba\n\
+           --persistence-mode MODO required | best-effort (default: best-effort)\n\
            --persistence-queue N   Eventos máximos en espera (256)\n\
            --persistence-batch N   Detecciones por transacción (25)\n\
            --persistence-flush-ms N  Flush máximo en milisegundos (500)\n\

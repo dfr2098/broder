@@ -200,7 +200,7 @@ flowchart TD
     FLUSH -->|Sí| BUS[Publicar en InMemoryEventBus]
     BUS --> ROUTER[PersistenceRouter]
     ROUTER --> POLICY[Seleccionar dominio temporal]
-    POLICY --> WRITER[ClickHouseVisionDetectionWriter]
+    POLICY --> WRITER[JaibaVisionDetectionWriter]
     WRITER --> TX{¿Transacción correcta?}
     TX -->|Sí| COMMIT[Confirmar lote y actualizar métricas]
     TX -->|No| RECONNECT[Reconectar y reintentar una vez]

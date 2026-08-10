@@ -2,7 +2,7 @@
 
 Little Brother es una plataforma de observabilidad industrial. El prototipo
 actual cubre el modelo físico de transportadores, inferencia YOLO, tracking,
-interpretación espacial y persistencia temporal de detecciones en ClickHouse vía Jaiva (`DMA_JAIVA`).
+interpretación espacial y entrega fire-and-forget de detecciones a Jaiba (`DMA_JAIVA`); las DB viven detrás de Jaiba.
 Permanece independiente de PLC, WMS y fabricantes específicos.
 
 ## Documentación
@@ -21,7 +21,7 @@ La guía completa comienza en [`docs/README.md`](docs/README.md):
 ```text
 core/rs/crates/event-core        Contratos del bus de eventos
 core/rs/crates/persistence-core  Puertos y router de persistencia
-core/rs/crates/persistence-clickhouse  Adaptador temporal ClickHouse vía Jaiva
+core/rs/crates/jaiba-bridge            Puente Broder → Jaiba (sin drivers de DB)
 core/rs/crates/transport-core    Dominio físico de transportadores
 core/rs/crates/vision-core       Detecciones, muestreo y NMS neutrales
 core/rs/crates/tracking-core     Identidad temporal y trayectorias visuales
@@ -30,22 +30,21 @@ core/rs/apps/transport-simulator Simulador local
 core/rs/apps/video-viewer        Visor provisional de videos
 core/rs/apps/vision-inference    Motor YOLO 11 con OpenCV DNN
 core/yolo/models                 Modelos ONNX locales
-docker-compose.yml               ClickHouse de infraestructura
+docker-compose.yml               Visualizador Nginx (sin bases de datos)
 ```
 
 Los procesos Rust se ejecutan directamente en el SP o equipo de planta.
-ClickHouse (vía gateway Jaiva / `DMA_JAIVA`) y el visualizador Nginx se
-ejecutan en contenedores. ClickHouse se conecta al proceso mediante el bus de
-eventos y `PersistenceRouter`; el panel recibe los WebSockets mediante un proxy
-hacia `vision-inference`. Los núcleos visuales no conocen SQL ni Nginx.
+El visualizador Nginx corre en contenedor. Jaiba (lab `DMA_JAIVA`) es externo:
+Broder solo le entrega `EventEnvelope`. El panel recibe WebSockets vía proxy
+hacia `vision-inference`. Los núcleos no conocen SQL, drivers ni Nginx.
 
 ## Comprobar el proyecto
 
-Diagnosticar dependencias, archivos y ClickHouse/Jaiva:
+Diagnosticar dependencias, archivos y Jaiba:
 
 ```bash
 make doctor
-make doctor CLICKHOUSE_HTTP_PORT=18123  # cuando se usa el puerto alternativo
+make doctor  # comprueba DMA_JAIVA si está definida
 ```
 
 Ejecutar todas las pruebas:
@@ -203,7 +202,7 @@ Compilar los binarios optimizados para el SP:
 make release
 ```
 
-## Fase 5: persistencia ClickHouse (vía Jaiva)
+## Fase 5: puente Jaiba (fire-and-forget)
 
 Crear la configuración local e iniciar ClickHouse (o apuntar `DMA_JAIVA` al
 gateway Jaiva del lab):
@@ -214,43 +213,26 @@ make infra-up
 ```
 
 `make vision`, `make vision-headless` y `make vision-smoke` leen
-`DMA_JAIVA` y envían cada `VisionDetection` a un worker de persistencia. El
-worker usa una cola acotada, lotes HTTP, flush periódico y reconexión. El
-esquema y los índices se crean de manera idempotente.
+`DMA_JAIVA` y entregan cada `EventEnvelope` a Jaiba sin esperar confirmación
+de base de datos. El hilo de video nunca se bloquea por Jaiba ni por un INSERT.
 
 ```text
 mode=required queue=256 batch=25 flush_ms=500
 ```
 
-Para mantener la visión activa cuando Jaiva/ClickHouse no estén disponibles:
+Por defecto el modo es `best-effort`. Si Jaiba no está disponible:
 
 ```bash
 make vision PERSISTENCE_MODE=best-effort
 ```
 
-Consultar las últimas veinte detecciones:
+Broder no consulta bases de datos. El histórico se lee desde Jaiba/DMA_JAIVA.
 
 ```bash
 make vision-query
 ```
 
-O ejecutar directamente:
-
-```sql
-SELECT *
-FROM temporal.vision_detection
-ORDER BY occurred_at DESC;
-```
-
-Si `8123` ya está ocupado, se puede cambiar el puerto sin modificar archivos:
-
-```bash
-make infra-up CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
-make vision CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
-```
-
-Para ejecutar el motor provisionalmente sin ClickHouse/Jaiva, se puede usar el
-binario con `--no-persistence`.
+Para ejecutar sin entregar eventos a Jaiba: `--no-persistence`.
 
 Detenerla sin eliminar sus datos:
 

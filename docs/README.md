@@ -8,7 +8,7 @@ marcadas como futuras no forman parte del ejecutable actual.
 - [Diagramas de flujo](FLOWS.md): recorrido general, inicialización,
   procesamiento por frame, tracking, análisis espacial, persistencia y cierre.
 - [Instalación](INSTALLATION.md): requisitos del SP, OpenCV, Rust, modelo ONNX
-  y ClickHouse vía Jaiva.
+  y entrega de eventos a Jaiba.
 - [Operación](OPERATIONS.md): comandos, configuración, logs, RTSP, visor,
   diagnóstico y mantenimiento de la base.
 - [Modelo de datos](DATA_MODEL.md): contratos Rust, eventos, identificadores,
@@ -34,13 +34,13 @@ flowchart TD
     TRACK --> SPATIAL[Modelo espacial]
     DET --> EVENT[EventEnvelope]
     EVENT --> BUS[Bus y PersistenceRouter]
-    BUS --> CH[(ClickHouse vía Jaiva)]
+    BUS --> JB[(Jaiba / DMA_JAIVA)]
 ```
 
 La explicación paso a paso y los flujos alternativos están en
 [Diagramas de flujo](FLOWS.md).
 
-El proceso Rust se ejecuta directamente en el SP. ClickHouse/Jaiva y el visualizador
+El proceso Rust se ejecuta directamente en el SP. Jaiba (externo) y el visualizador
 web Nginx se ejecutan en contenedores separados.
 
 ## Inicio rápido
@@ -60,11 +60,11 @@ Para abrir la visualización:
 make vision
 ```
 
-Si el puerto `8123` ya está ocupado:
+Si Jaiba escucha en otro host/puerto:
 
 ```bash
-make infra-up CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
-make vision-smoke CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
+export DMA_JAIVA=http://127.0.0.1:19090
+make vision-smoke
 ```
 
 ## Fuentes de verdad
@@ -76,6 +76,6 @@ Cuando la documentación y el código difieran, estas son las fuentes de verdad:
 | Comandos y valores predeterminados | [`Makefile`](../Makefile) |
 | Opciones del motor | [`config.rs`](../core/rs/apps/vision-inference/src/config.rs) |
 | Geometría DEMO | [`camera-1.spatial`](../core/vision/config/camera-1.spatial) |
-| Esquema ClickHouse | [`0001_temporal_vision_detection.sql`](../core/rs/crates/persistence-clickhouse/migrations/0001_temporal_vision_detection.sql) |
+| Contrato Jaiba | [`examples/jaiva/README.md`](../examples/jaiva/README.md) |
 | Dependencias Rust | [`Cargo.lock`](../core/rs/Cargo.lock) |
-| Contenedor ClickHouse | [`docker-compose.yml`](../docker-compose.yml) |
+| Visualizador Nginx | [`docker-compose.yml`](../docker-compose.yml) |

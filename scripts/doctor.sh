@@ -5,7 +5,6 @@ set -u
 model_path=${1:-core/yolo/models/yolo11n.onnx}
 video_source=${2:-}
 spatial_path=${3:-core/vision/config/camera-1.spatial}
-expected_ch_port=${4:-8123}
 failures=0
 minimum_opencv_version=4.13.0
 
@@ -77,29 +76,13 @@ esac
 
 if test -n "${DMA_JAIVA:-}"; then
     ok "DMA_JAIVA configurada: $DMA_JAIVA"
-else
-    warn "DMA_JAIVA no está definida; la persistencia quedará desactivada"
-fi
-
-published_port=$(docker compose port clickhouse 8123 2>/dev/null || true)
-if test -z "$published_port"; then
-    if test -n "${DMA_JAIVA:-}"; then
-        warn "ClickHouse local no está iniciado; se asume gateway Jaiva externo en DMA_JAIVA"
+    if curl -fsS -o /dev/null --max-time 2 "${DMA_JAIVA%/}/api/v1/whoami" 2>/dev/null; then
+        ok "Jaiba responde en /api/v1/whoami"
     else
-        fail "ClickHouse no está iniciado; use make infra-up o configure DMA_JAIVA"
+        warn "Jaiba no respondió whoami; la visión puede continuar en best-effort"
     fi
 else
-    actual_port=${published_port##*:}
-    if test "$actual_port" = "$expected_ch_port"; then
-        ok "puerto ClickHouse HTTP coherente: $actual_port"
-    else
-        fail "ClickHouse publica $actual_port pero CLICKHOUSE_HTTP_PORT=$expected_ch_port"
-    fi
-    if curl -fsS "http://127.0.0.1:${actual_port}/ping" >/dev/null 2>&1; then
-        ok "ClickHouse acepta HTTP /ping"
-    else
-        fail "ClickHouse no responde en /ping"
-    fi
+    warn "DMA_JAIVA no está definida; Broder no entregará eventos"
 fi
 
 if test "$failures" -eq 0; then

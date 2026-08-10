@@ -78,19 +78,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             VisionEventPublisher::start(dma_jaiva_url, &options.source_id, options.persistence)?;
         match startup {
             PersistenceStartup::Connected => logger.info(format!(
-                "persistencia ClickHouse vía Jaiva activa: mode={} queue={} batch={} flush_ms={}",
+                "puente Jaiba activo (fire-and-forget): mode={} queue={} batch={} flush_ms={}",
                 options.persistence.mode,
                 options.persistence.queue_capacity,
                 options.persistence.batch_size,
                 options.persistence.flush_interval_ms
             ))?,
             PersistenceStartup::Recovering(message) => logger.warn(format!(
-                "persistencia iniciada sin conexión; se reintentará: {message}"
+                "puente Jaiba sin conexión; la visión continúa y se reintentará: {message}"
             ))?,
         }
         Some(publisher)
     } else {
-        logger.info("persistencia desactivada: DMA_JAIVA no configurada")?;
+        logger.info("puente Jaiba desactivado: DMA_JAIVA no configurada")?;
         None
     };
 

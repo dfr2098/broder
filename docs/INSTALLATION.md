@@ -10,8 +10,9 @@ SP / equipo de planta
 ├── OpenCV instalado localmente
 ├── modelo YOLO ONNX almacenado localmente
 └── Docker o Podman
-    ├── ClickHouse 24.8
     └── visualizador Nginx 1.30.4
+
+Jaiba / bases de datos viven fuera de Broder (lab DMA_JAIVA).
 ```
 
 El motor de visión no se ejecuta dentro de un contenedor. Esto permite acceso
@@ -27,7 +28,6 @@ El prototipo ha sido validado con:
 | Rust | 1.97.1 |
 | Cargo | 1.97.1 |
 | OpenCV | 4.13.0 |
-| ClickHouse | 24.8 |
 | Edición Rust | 2024 |
 
 También se requieren:
@@ -137,17 +137,14 @@ cp .env.example .env
 La configuración predeterminada es:
 
 ```dotenv
-DMA_JAIVA=http://127.0.0.1:8123
-CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=
-CLICKHOUSE_DATABASE=temporal
-CLICKHOUSE_HTTP_PORT=8123
+DMA_JAIVA=http://127.0.0.1:19090
+JAIBA_TOKEN=
+JAIBA_INGEST_PATH=/api/v1/ingest/events
 ```
 
-`DMA_JAIVA` es la URL del gateway Jaiva→ClickHouse del lab `DMA_JAIVA`. En
-local puede apuntar al HTTP de ClickHouse del compose; en planta debe apuntar
-al proxy Jaiva. Una `DMA_JAIVA` pasada explícitamente en la línea de comandos
-tiene prioridad. El archivo `.env` no debe versionarse.
+`DMA_JAIVA` es la URL del servidor Jaiba del lab `DMA_JAIVA`. Broder no
+conoce drivers ni credenciales de bases de datos. El archivo `.env` no debe
+versionarse.
 
 ## Instalar el modelo YOLO
 
@@ -169,7 +166,7 @@ El checksum aprobado está documentado en
 usa clases COCO: permite comprobar el flujo técnico, pero no sustituye un
 modelo entrenado para pallets o cajas de la planta.
 
-## Iniciar ClickHouse
+## Conectar Jaiba
 
 ```bash
 make infra-up
@@ -182,13 +179,13 @@ a la red de planta.
 Si `8123` está ocupado:
 
 ```bash
-make infra-up CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
+export DMA_JAIVA=http://127.0.0.1:19090
 ```
 
 Use el mismo valor al ejecutar visión:
 
 ```bash
-make vision-smoke CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
+make vision-smoke
 ```
 
 ## Compilar y validar

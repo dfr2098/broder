@@ -20,8 +20,8 @@ Todos los comandos de esta guía se ejecutan desde la raíz del repositorio.
 | `TRACK_MAX_LOST_MS` | `1500` | Tiempo máximo sin observación |
 | `TRACK_MIN_IOU` | `0.05` | IoU mínima de asociación |
 | `TRACK_MAX_DISTANCE` | `0.25` | Distancia normalizada máxima |
-| `CLICKHOUSE_HTTP_PORT` | `8123` | Puerto HTTP local de ClickHouse |
-| `DMA_JAIVA` | `http://127.0.0.1:8123` | Gateway Jaiva→ClickHouse usado por Rust |
+| `DMA_JAIVA` | `http://127.0.0.1:19090` | Servidor Jaiba (lab DMA_JAIVA) |
+| `JAIBA_TOKEN` | vacío | Bearer opcional para el ingest |
 | `PERSISTENCE_MODE` | `required` | `required` o `best-effort` |
 | `PERSISTENCE_QUEUE` | `256` | Eventos máximos esperando al worker |
 | `PERSISTENCE_BATCH` | `25` | Detecciones por transacción |
@@ -33,7 +33,7 @@ Las variables pueden pasarse a `make` sin modificar archivos:
 make vision FPS=5 CONFIDENCE=0.40 SOURCE_ID=cam-entrada
 ```
 
-## Infraestructura ClickHouse
+## Infraestructura (sin DB en Broder)
 
 Iniciar, inspeccionar logs y detener:
 
@@ -57,7 +57,7 @@ Comprobar instalación, archivos y coherencia del puerto ClickHouse:
 
 ```bash
 make doctor
-make doctor CLICKHOUSE_HTTP_PORT=18123
+make doctor
 ```
 
 ## Visor provisional
@@ -441,8 +441,8 @@ ORDER BY minute DESC;
 ### El puerto 8123 está ocupado
 
 ```bash
-make infra-up CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
-make vision CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
+export DMA_JAIVA=http://127.0.0.1:19090
+make vision
 ```
 
 ### No se encuentra OpenCV
@@ -475,7 +475,7 @@ docker compose ps
 make infra-logs
 ```
 
-Confirme que `CLICKHOUSE_HTTP_PORT` y el puerto contenido en `DMA_JAIVA` sean iguales.
+Confirme que `DMA_JAIVA` apunta al servidor Jaiba del lab y que el ingest responde 2xx.
 
 ### YOLO identifica una clase incorrecta
 

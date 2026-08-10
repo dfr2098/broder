@@ -65,12 +65,12 @@ depende de `event-core`, PostgreSQL, ClickHouse ni protocolos externos.
 Consume eventos y los clasifica en dominios operativo, temporal o relacional.
 Solo define puertos; no contiene SQL ni depende de un motor concreto.
 
-### `persistence-clickhouse`
+### `jaiba-bridge`
 
-Es el adaptador de infraestructura que implementa `PersistenceWriter` para las
-detecciones visuales temporales. Conoce el gateway Jaiva (`DMA_JAIVA`),
-ClickHouse, la migración y la inserción HTTP; ningún núcleo funcional depende
-de este crate.
+Es el adaptador de infraestructura que entrega `EventEnvelope` a Jaiba
+(`DMA_JAIVA`) por HTTP ingest. No conoce drivers, credenciales ni motores de
+base de datos; Jaiba bufferiza y enruta. Ningún núcleo funcional depende de
+este crate.
 
 ### `vision-core`
 
@@ -236,13 +236,13 @@ flowchart LR
     WORKER --> BUS{{InMemoryEventBus}}
     BUS --> ROUTER[PersistenceRouter]
     ROUTER --> POLICY{Dominio temporal}
-    POLICY --> WRITER[ClickHouseVisionDetectionWriter]
+    POLICY --> WRITER[JaibaVisionDetectionWriter]
     WRITER --> TABLE[(temporal.vision_detection)]
 ```
 
 La aplicación compone las implementaciones, pero el motor YOLO únicamente
 produce `VisionDetection`. La política selecciona el dominio temporal y el
-adaptador ClickHouse realiza inserciones HTTP JSONEachRow vía Jaiva. No
+adaptador Jaiba entrega lotes JSON al ingest. No
 se usa un documento JSON para este flujo.
 
 ```text
@@ -262,7 +262,7 @@ una secuencia para evitar colisiones al reiniciar la cámara o reprocesar un
 archivo.
 
 La entrega desde video es asíncrona mediante una cola acotada. Dentro del worker
-el bus y el router son síncronos, y ClickHouse confirma lotes HTTP vía Jaiva,
+el bus y el router son síncronos en el worker, y Jaiba acepta lotes (202);
 intervalo o cierre. El escritor reconecta y reintenta una vez. Un bus durable
 podrá reemplazar esta cola sin modificar `vision-core`.
 
@@ -272,9 +272,9 @@ alarmas y reglas industriales permanecen fuera de su alcance.
 ## Evolución de persistencia
 
 ```text
-Actual: ClickHouse temporal vía Jaiva para VisionDetection
-Siguiente: almacén operativo/relacional + eventos de track/espacio
-Escala: consumidores analíticos sobre ClickHouse
+Actual: Broder → Jaiba (fire-and-forget) para VisionDetection
+Siguiente: Jaiba enruta histórico/config/hot según política
+Escala: ClickHouse histórico + consumidores analíticos detrás de Jaiba
 ```
 
 El cambio de fase solo reemplaza o agrega implementaciones de
@@ -297,7 +297,7 @@ flowchart TD
     GRA -->|Sí| GRAW[Relational writer]
 
     OPW --> PG[(PostgreSQL)]
-    HISW --> TS[(ClickHouse vía Jaiva)]
+    HISW --> TS[(Jaiba → ClickHouse / otros)]
     GRAW --> GRAPH[(PostgreSQL / grafo futuro)]
 
     OP -->|No| END[Sin escritura en ese dominio]
@@ -338,7 +338,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     subgraph F1[Etapa actual]
-        B1[Little Brother] --> P1[(ClickHouse vía Jaiva)]
+        B1[Little Brother] --> P1[(Jaiba ingest)]
     end
 
     subgraph F2[Etapa de escala temporal]
@@ -383,7 +383,7 @@ flowchart LR
         Q[Cola acotada]
         PW[Worker de persistencia]
         PR[PersistenceRouter]
-        PGA[persistence-clickhouse]
+        PGA[jaiba-bridge]
 
         CON -. futuros conectores .-> NOR
         NOR -. eventos futuros .-> BUS
@@ -397,18 +397,18 @@ flowchart LR
     end
 
     subgraph DOCKER[Contenedores de infraestructura]
-        CH[(ClickHouse vía Jaiva)]
+        JB[(Jaiba / DMA_JAIVA)]
         WEB[Visualizador Nginx]
     end
 
-    PGA -->|detección temporal actual| CH
+    PGA -->|EventEnvelope fire-and-forget| JB
     WSB -->|HTTP/WebSocket :8081| WEB
     WEB -->|HTTP :8088| BROWSER[Navegador local o de planta]
 ```
 
 El backend web actual es una salida operativa en vivo y no un consumidor durable
 del bus. Recibe el resultado compuesto dentro de `vision-inference`, distribuye
-los frames mediante un canal broadcast acotado y no consulta ClickHouse. Nginx
+los frames mediante un canal broadcast acotado y no consulta Jaiba/DB. Nginx
 sirve los recursos estáticos y actúa como proxy WebSocket. Un dashboard
 histórico o multicámara continúa siendo una evolución futura.
 
@@ -416,7 +416,7 @@ Flujo de operación del prototipo:
 
 ```text
 SP nativo:       binarios Rust y backend WebSocket
-Infraestructura: ClickHouse (gateway Jaiva / DMA_JAIVA) y visualizador Nginx en Docker Compose
+Infraestructura: Jaiba (DMA_JAIVA) externo y visualizador Nginx en Docker Compose
 ```
 
 Para producción, los binarios Rust podrán administrarse como servicios del
@@ -426,14 +426,13 @@ la ruta de procesamiento.
 ## Adaptadores de infraestructura
 
 Los adaptadores concretos viven en crates separados de los núcleos. El primero
-es `persistence-clickhouse`; los siguientes pueden conservar el mismo patrón:
+es `jaiba-bridge`; los siguientes pueden conservar el mismo patrón:
 
 ```text
 crates/
-├── persistence-clickhouse  # actual (vía DMA_JAIVA)
-├── bus-nats                 # futuro
-├── operational-store        # futuro
-└── relational-store         # futuro
+├── jaiba-bridge   # actual (solo Jaiba)
+├── bus-nats       # futuro
+└── …
 ```
 
 El bus y la cola actuales viven en memoria. Proporcionan aislamiento,

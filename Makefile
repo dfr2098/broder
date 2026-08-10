@@ -3,13 +3,8 @@
 -include .env
 
 export CCACHE_DISABLE := 1
-CLICKHOUSE_DATABASE ?= temporal
-CLICKHOUSE_USER ?= default
-CLICKHOUSE_PASSWORD ?=
-CLICKHOUSE_HTTP_PORT ?= 8123
-CLICKHOUSE_NATIVE_PORT ?= 9000
-DMA_JAIVA ?= http://127.0.0.1:$(CLICKHOUSE_HTTP_PORT)
-export CLICKHOUSE_DATABASE CLICKHOUSE_USER CLICKHOUSE_PASSWORD CLICKHOUSE_HTTP_PORT CLICKHOUSE_NATIVE_PORT DMA_JAIVA
+DMA_JAIVA ?= http://127.0.0.1:19090
+export DMA_JAIVA
 
 OPENCV_VERSION ?= 4.13.0
 OPENCV_LOCAL_PREFIX ?= $(HOME)/.local/opencv-$(OPENCV_VERSION)
@@ -34,7 +29,7 @@ TRACK_MAX_MISSED ?= 5
 TRACK_MAX_LOST_MS ?= 1500
 TRACK_MIN_IOU ?= 0.05
 TRACK_MAX_DISTANCE ?= 0.25
-PERSISTENCE_MODE ?= required
+PERSISTENCE_MODE ?= best-effort
 PERSISTENCE_QUEUE ?= 256
 PERSISTENCE_BATCH ?= 25
 PERSISTENCE_FLUSH_MS ?= 500
@@ -57,7 +52,7 @@ release:
 	cd core/rs && cargo build --release --workspace
 
 doctor:
-	bash scripts/doctor.sh "$(MODEL)" "$(VIDEO)" "$(SPATIAL_CONFIG)" "$(CLICKHOUSE_HTTP_PORT)"
+	bash scripts/doctor.sh "$(MODEL)" "$(VIDEO)" "$(SPATIAL_CONFIG)"
 
 opencv-local:
 	bash scripts/install-opencv-local.sh
@@ -94,9 +89,8 @@ vision-logs:
 	tail -n 100 -F "$(VISION_LOG)"
 
 vision-query:
-	curl -sS "http://127.0.0.1:$${CLICKHOUSE_HTTP_PORT:-8123}/?database=$${CLICKHOUSE_DATABASE:-temporal}" \
-		--user "$${CLICKHOUSE_USER:-default}:$${CLICKHOUSE_PASSWORD:-}" \
-		--data-binary "SELECT * FROM temporal.vision_detection ORDER BY occurred_at DESC LIMIT 20 FORMAT PrettyCompact"
+	@echo "Broder no consulta bases de datos. Use Jaiba / DMA_JAIVA para leer histórico."
+	@echo "DMA_JAIVA=$${DMA_JAIVA:-no configurada}"
 
 verify-model:
 	cd core/yolo/models && sha256sum -c SHA256SUMS
@@ -115,13 +109,14 @@ web-logs:
 	docker compose logs -f web
 
 infra-up:
-	docker compose up -d clickhouse
+	@echo "Broder ya no levanta bases de datos. Arranque Jaiba desde DMA_JAIVA."
+	@echo "Opcional: make web-up"
 
 infra-down:
 	docker compose down
 
 infra-logs:
-	docker compose logs -f clickhouse
+	docker compose logs -f web
 
 infra-reset:
 	docker compose down -v

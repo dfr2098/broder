@@ -108,47 +108,24 @@ PersistencePolicy
         ↓
 PersistenceDomain::Temporal
         ↓
-ClickHouseVisionDetectionWriter
+JaibaVisionDetectionWriter  →  POST DMA_JAIVA/api/v1/ingest/events
+        ↓
+Jaiba (buffer / hot path) → motores detrás de Jaiba
 ```
 
-`vision-core` no conoce el bus, ClickHouse ni SQL. La composición ocurre en la
-aplicación `vision-inference` y el SQL permanece dentro del adaptador de
-infraestructura `persistence-clickhouse`.
+`vision-core` no conoce el bus, Jaiba, SQL ni ningún motor. La composición
+ocurre en `vision-inference` y el puente HTTP vive en `jaiba-bridge`.
 
-## Tabla temporal.vision_detection
+Broder **no** define ni migra tablas. El esquema histórico (p. ej. ClickHouse
+`temporal.vision_detection`) pertenece a Jaiba / DMA_JAIVA.
 
-| Columna | Tipo | Descripción |
-|---|---|---|
-| `event_id` | `String` | ID único por sesión y secuencia |
-| `event_type` | `LowCardinality(String)` | `vision.detection.observed` |
-| `schema_version` | `Int16` | Versión del contrato |
-| `occurred_at` | `DateTime64(3, 'UTC')` | Tiempo real de publicación |
-| `observed_at` | `DateTime64(3, 'UTC')` | Tiempo real de observación |
-| `source_id` | `LowCardinality(String)` | Cámara lógica |
-| `correlation_id` | `Nullable(String)` | Correlación opcional |
-| `detection_id` | `String` | ID producido por visión |
-| `frame_id` | `Int64` | Frame de la fuente |
-| `source_timestamp_ms` | `Int64` | Posición temporal dentro del flujo |
-| `class_id` | `Int32` | Clase numérica del modelo |
-| `class_name` | `LowCardinality(String)` | Nombre de clase |
-| `confidence` | `Float32` | Confianza entre 0 y 1 |
-| `bbox_x`, `bbox_y` | `Float32` | Origen normalizado |
-| `bbox_width`, `bbox_height` | `Float32` | Dimensiones normalizadas |
-| `persisted_at` | `DateTime64(3, 'UTC')` | Tiempo de inserción ClickHouse |
+## Entrega asíncrona
 
-Ordenación / motor:
-
-- `ENGINE = ReplacingMergeTree(persisted_at)`
-- `ORDER BY (source_id, occurred_at, event_id)`
-
-La migración se ejecuta automáticamente al conectar por el gateway Jaiva
-(`DMA_JAIVA`) y usa operaciones idempotentes. Las inserciones van por HTTP
-`JSONEachRow` en lotes.
-
-Antes del adaptador existe una cola acotada. El worker hace flush al completar
-el lote, vencer el intervalo o cerrar el motor. Si una transacción falla, abre
-una conexión nueva y reintenta una vez. En modo `required` se aplica
-backpressure; en `best-effort` el análisis continúa y contabiliza las pérdidas.
+Antes del puente existe una cola acotada. El hilo de video solo hace
+`try_send` (fire-and-forget): nunca espera a Jaiba ni a un INSERT. El worker
+agrupa lotes, hace flush por tamaño/intervalo y reintenta el puente si Jaiba
+cae. `persisted` en métricas significa “aceptado por Jaiba (2xx)”, no
+“escrito en ClickHouse/Postgres”.
 
 ## Semántica de tiempos
 
@@ -156,7 +133,7 @@ Para no confundir la posición de un video con una fecha real:
 
 - `occurred_at` y `observed_at` usan el reloj Unix del SP;
 - `source_timestamp_ms` conserva la posición relativa del archivo o flujo;
-- `persisted_at` lo asigna ClickHouse al insertar.
+- cualquier `persisted_at` lo asigna el motor detrás de Jaiba.
 
 ## Identificadores
 

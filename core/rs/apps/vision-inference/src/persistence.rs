@@ -7,7 +7,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use event_core::{EventBus, EventEnvelope, EventSource, InMemoryEventBus, SourceKind};
-use persistence_clickhouse::ClickHouseVisionDetectionWriter;
+use jaiba_bridge::JaibaVisionDetectionWriter;
 use persistence_core::{PersistenceDomain, PersistencePolicy, PersistenceRouter};
 use vision_core::VisionDetection;
 
@@ -77,7 +77,6 @@ pub(crate) struct VisionEventPublisher {
     source: EventSource,
     session_id: u128,
     next_sequence: u64,
-    mode: PersistenceMode,
     metrics: Arc<SharedMetrics>,
 }
 
@@ -94,7 +93,7 @@ impl VisionEventPublisher {
         let worker_metrics = metrics.clone();
         let dma_jaiva_url = dma_jaiva_url.to_owned();
         let worker = thread::Builder::new()
-            .name("vision-persistence".to_owned())
+            .name("vision-jaiba-bridge".to_owned())
             .spawn(move || {
                 worker_loop(
                     &dma_jaiva_url,
@@ -121,7 +120,6 @@ impl VisionEventPublisher {
                 source,
                 session_id: SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
                 next_sequence: 1,
-                mode: config.mode,
                 metrics,
             },
             startup,
@@ -151,7 +149,7 @@ impl VisionEventPublisher {
             match worker.join() {
                 Ok(Ok(())) => {}
                 Ok(Err(message)) => return Err(io::Error::other(message).into()),
-                Err(_) => return Err(io::Error::other("el worker de persistencia colapsó").into()),
+                Err(_) => return Err(io::Error::other("el worker Jaiba colapsó").into()),
             }
         }
         Ok(self.snapshot())
@@ -177,34 +175,20 @@ impl VisionEventPublisher {
         )?)
     }
 
+    /// Fire-and-forget: el hilo de video nunca espera a Jaiba ni a una DB.
     fn enqueue(&self, event: EventEnvelope<VisionDetection>) -> Result<(), Box<dyn Error>> {
         let Some(sender) = &self.sender else {
-            return Err(io::Error::other("la persistencia ya fue cerrada").into());
+            return Err(io::Error::other("el puente Jaiba ya fue cerrado").into());
         };
-        match self.mode {
-            PersistenceMode::Required => {
-                self.metrics.queued.fetch_add(1, Ordering::Relaxed);
-                if sender.send(WorkerCommand::Event(Box::new(event))).is_err() {
-                    self.metrics.queued.fetch_sub(1, Ordering::Relaxed);
-                    return Err(io::Error::other("worker de persistencia no disponible").into());
-                }
-            }
-            PersistenceMode::BestEffort => {
-                self.metrics.queued.fetch_add(1, Ordering::Relaxed);
-                match sender.try_send(WorkerCommand::Event(Box::new(event))) {
-                    Ok(()) => {}
-                    Err(TrySendError::Full(_)) => {
-                        self.metrics.queued.fetch_sub(1, Ordering::Relaxed);
-                        self.metrics.dropped.fetch_add(1, Ordering::Relaxed);
-                    }
-                    Err(TrySendError::Disconnected(_)) => {
-                        self.metrics.queued.fetch_sub(1, Ordering::Relaxed);
-                        self.metrics.dropped.fetch_add(1, Ordering::Relaxed);
-                    }
-                }
+        self.metrics.queued.fetch_add(1, Ordering::Relaxed);
+        match sender.try_send(WorkerCommand::Event(Box::new(event))) {
+            Ok(()) => Ok(()),
+            Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {
+                self.metrics.queued.fetch_sub(1, Ordering::Relaxed);
+                self.metrics.dropped.fetch_add(1, Ordering::Relaxed);
+                Ok(())
             }
         }
-        Ok(())
     }
 }
 
@@ -257,12 +241,11 @@ fn worker_loop(
                     metrics.dropped.fetch_add(1, Ordering::Relaxed);
                     continue;
                 };
-                if let Err(error) = active_bus.publish(&event) {
+                if let Err(_error) = active_bus.publish(&event) {
+                    // Jaiba lenta o caída no detiene Broder: se pierde el lote en curso
+                    // y se reintenta el puente. La confirmación de DB no es de Broder.
                     let lost = pending + 1;
                     pending = 0;
-                    if config.mode == PersistenceMode::Required {
-                        return Err(error.to_string());
-                    }
                     metrics.dropped.fetch_add(lost, Ordering::Relaxed);
                     metrics.connected.store(false, Ordering::Relaxed);
                     bus = None;
@@ -275,7 +258,7 @@ fn worker_loop(
                 }
             }
             Ok(WorkerCommand::Shutdown) | Err(RecvTimeoutError::Disconnected) => {
-                flush_bus(&mut bus, &mut pending, config.mode, &metrics)?;
+                flush_bus(&mut bus, &mut pending, &metrics);
                 return Ok(());
             }
             Err(RecvTimeoutError::Timeout) => {
@@ -286,7 +269,7 @@ fn worker_loop(
                         bus = Some(new_bus);
                     }
                 } else {
-                    flush_bus(&mut bus, &mut pending, config.mode, &metrics)?;
+                    flush_bus(&mut bus, &mut pending, &metrics);
                 }
             }
         }
@@ -297,8 +280,7 @@ fn connect_bus(
     dma_jaiva_url: &str,
     batch_size: usize,
 ) -> Result<InMemoryEventBus<VisionDetection>, Box<dyn Error>> {
-    let writer =
-        ClickHouseVisionDetectionWriter::connect_with_batch_size(dma_jaiva_url, batch_size)?;
+    let writer = JaibaVisionDetectionWriter::connect_with_batch_size(dma_jaiva_url, batch_size)?;
     let mut router = PersistenceRouter::new(VisionTemporalPolicy);
     router.register(writer);
     let mut bus = InMemoryEventBus::new();
@@ -309,31 +291,27 @@ fn connect_bus(
 fn flush_bus(
     bus: &mut Option<InMemoryEventBus<VisionDetection>>,
     pending: &mut u64,
-    mode: PersistenceMode,
     metrics: &SharedMetrics,
-) -> Result<(), String> {
+) {
     if *pending == 0 {
-        return Ok(());
+        return;
     }
     let Some(active_bus) = bus.as_mut() else {
         metrics.dropped.fetch_add(*pending, Ordering::Relaxed);
         *pending = 0;
-        return Ok(());
+        return;
     };
     match active_bus.flush() {
         Ok(()) => {
             metrics.persisted.fetch_add(*pending, Ordering::Relaxed);
             *pending = 0;
-            Ok(())
         }
-        Err(_error) if mode == PersistenceMode::BestEffort => {
+        Err(_error) => {
             metrics.dropped.fetch_add(*pending, Ordering::Relaxed);
             metrics.connected.store(false, Ordering::Relaxed);
             *pending = 0;
             *bus = None;
-            Ok(())
         }
-        Err(error) => Err(error.to_string()),
     }
 }
 
