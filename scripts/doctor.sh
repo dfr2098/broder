@@ -5,7 +5,7 @@ set -u
 model_path=${1:-core/yolo/models/yolo11n.onnx}
 video_source=${2:-}
 spatial_path=${3:-core/vision/config/camera-1.spatial}
-expected_db_port=${4:-5432}
+expected_ch_port=${4:-8123}
 failures=0
 minimum_opencv_version=4.13.0
 
@@ -26,7 +26,7 @@ fail() {
     failures=$((failures + 1))
 }
 
-for command_name in cargo rustc pkg-config sha256sum docker; do
+for command_name in cargo rustc pkg-config sha256sum docker curl; do
     if command -v "$command_name" >/dev/null 2>&1; then
         ok "comando disponible: $command_name"
     else
@@ -75,20 +75,30 @@ case "$video_source" in
         ;;
 esac
 
-published_port=$(docker compose port db 5432 2>/dev/null || true)
+if test -n "${DMA_JAIVA:-}"; then
+    ok "DMA_JAIVA configurada: $DMA_JAIVA"
+else
+    warn "DMA_JAIVA no está definida; la persistencia quedará desactivada"
+fi
+
+published_port=$(docker compose port clickhouse 8123 2>/dev/null || true)
 if test -z "$published_port"; then
-    fail "PostgreSQL no está iniciado; use make infra-up"
+    if test -n "${DMA_JAIVA:-}"; then
+        warn "ClickHouse local no está iniciado; se asume gateway Jaiva externo en DMA_JAIVA"
+    else
+        fail "ClickHouse no está iniciado; use make infra-up o configure DMA_JAIVA"
+    fi
 else
     actual_port=${published_port##*:}
-    if test "$actual_port" = "$expected_db_port"; then
-        ok "puerto PostgreSQL coherente: $actual_port"
+    if test "$actual_port" = "$expected_ch_port"; then
+        ok "puerto ClickHouse HTTP coherente: $actual_port"
     else
-        fail "PostgreSQL publica $actual_port pero DB_PORT=$expected_db_port"
+        fail "ClickHouse publica $actual_port pero CLICKHOUSE_HTTP_PORT=$expected_ch_port"
     fi
-    if docker compose exec -T db pg_isready -U "${POSTGRES_USER:-little_brother}" -d "${POSTGRES_DB:-little_brother}" >/dev/null 2>&1; then
-        ok "PostgreSQL acepta conexiones dentro del contenedor"
+    if curl -fsS "http://127.0.0.1:${actual_port}/ping" >/dev/null 2>&1; then
+        ok "ClickHouse acepta HTTP /ping"
     else
-        fail "PostgreSQL no está listo"
+        fail "ClickHouse no responde en /ping"
     fi
 fi
 

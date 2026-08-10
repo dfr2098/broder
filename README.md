@@ -2,7 +2,7 @@
 
 Little Brother es una plataforma de observabilidad industrial. El prototipo
 actual cubre el modelo físico de transportadores, inferencia YOLO, tracking,
-interpretación espacial y persistencia temporal de detecciones en PostgreSQL.
+interpretación espacial y persistencia temporal de detecciones en ClickHouse vía Jaiva (`DMA_JAIVA`).
 Permanece independiente de PLC, WMS y fabricantes específicos.
 
 ## Documentación
@@ -21,7 +21,7 @@ La guía completa comienza en [`docs/README.md`](docs/README.md):
 ```text
 core/rs/crates/event-core        Contratos del bus de eventos
 core/rs/crates/persistence-core  Puertos y router de persistencia
-core/rs/crates/persistence-postgres  Adaptador temporal PostgreSQL
+core/rs/crates/persistence-clickhouse  Adaptador temporal ClickHouse vía Jaiva
 core/rs/crates/transport-core    Dominio físico de transportadores
 core/rs/crates/vision-core       Detecciones, muestreo y NMS neutrales
 core/rs/crates/tracking-core     Identidad temporal y trayectorias visuales
@@ -30,22 +30,22 @@ core/rs/apps/transport-simulator Simulador local
 core/rs/apps/video-viewer        Visor provisional de videos
 core/rs/apps/vision-inference    Motor YOLO 11 con OpenCV DNN
 core/yolo/models                 Modelos ONNX locales
-docker-compose.yml               PostgreSQL de infraestructura
+docker-compose.yml               ClickHouse de infraestructura
 ```
 
 Los procesos Rust se ejecutan directamente en el SP o equipo de planta.
-PostgreSQL y el visualizador Nginx se ejecutan en contenedores. PostgreSQL se
-conecta al proceso mediante el bus de eventos y `PersistenceRouter`; el panel
-recibe los WebSockets mediante un proxy hacia `vision-inference`. Los núcleos
-visuales no conocen SQL ni Nginx.
+ClickHouse (vía gateway Jaiva / `DMA_JAIVA`) y el visualizador Nginx se
+ejecutan en contenedores. ClickHouse se conecta al proceso mediante el bus de
+eventos y `PersistenceRouter`; el panel recibe los WebSockets mediante un proxy
+hacia `vision-inference`. Los núcleos visuales no conocen SQL ni Nginx.
 
 ## Comprobar el proyecto
 
-Diagnosticar dependencias, archivos y PostgreSQL:
+Diagnosticar dependencias, archivos y ClickHouse/Jaiva:
 
 ```bash
 make doctor
-make doctor DB_PORT=55432  # cuando se usa el puerto alternativo
+make doctor CLICKHOUSE_HTTP_PORT=18123  # cuando se usa el puerto alternativo
 ```
 
 Ejecutar todas las pruebas:
@@ -104,7 +104,7 @@ make demo-web
 
 Después abra `http://127.0.0.1:8088`. El comando utiliza exclusivamente el MP4
 incluido en `video prueba/`; el panel muestra el video, cajas, identificadores
-de track, zonas y métricas sin requerir PostgreSQL. El MP4 se repite hasta que
+de track, zonas y métricas sin requerir ClickHouse. El MP4 se repite hasta que
 el usuario detiene el motor con `Ctrl+C`.
 
 Ejecutarlo sin ventana o realizar una prueba corta de seis inferencias:
@@ -203,9 +203,10 @@ Compilar los binarios optimizados para el SP:
 make release
 ```
 
-## Fase 5: persistencia PostgreSQL
+## Fase 5: persistencia ClickHouse (vía Jaiva)
 
-Crear la configuración local e iniciar PostgreSQL:
+Crear la configuración local e iniciar ClickHouse (o apuntar `DMA_JAIVA` al
+gateway Jaiva del lab):
 
 ```bash
 cp .env.example .env
@@ -213,15 +214,15 @@ make infra-up
 ```
 
 `make vision`, `make vision-headless` y `make vision-smoke` leen
-`DATABASE_URL` y envían cada `VisionDetection` a un worker de persistencia. El
-worker usa una cola acotada, transacciones por lotes, flush periódico y
-reconexión. El esquema y los índices se crean de manera idempotente.
+`DMA_JAIVA` y envían cada `VisionDetection` a un worker de persistencia. El
+worker usa una cola acotada, lotes HTTP, flush periódico y reconexión. El
+esquema y los índices se crean de manera idempotente.
 
 ```text
 mode=required queue=256 batch=25 flush_ms=500
 ```
 
-Para mantener la visión activa cuando PostgreSQL no esté disponible:
+Para mantener la visión activa cuando Jaiva/ClickHouse no estén disponibles:
 
 ```bash
 make vision PERSISTENCE_MODE=best-effort
@@ -241,14 +242,14 @@ FROM temporal.vision_detection
 ORDER BY occurred_at DESC;
 ```
 
-Si `5432` ya está ocupado, se puede cambiar el puerto sin modificar archivos:
+Si `8123` ya está ocupado, se puede cambiar el puerto sin modificar archivos:
 
 ```bash
-make infra-up DB_PORT=55432
-make vision DB_PORT=55432
+make infra-up CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
+make vision CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
 ```
 
-Para ejecutar el motor provisionalmente sin PostgreSQL, se puede usar el
+Para ejecutar el motor provisionalmente sin ClickHouse/Jaiva, se puede usar el
 binario con `--no-persistence`.
 
 Detenerla sin eliminar sus datos:

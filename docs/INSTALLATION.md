@@ -10,7 +10,7 @@ SP / equipo de planta
 ├── OpenCV instalado localmente
 ├── modelo YOLO ONNX almacenado localmente
 └── Docker o Podman
-    ├── PostgreSQL 16.4
+    ├── ClickHouse 24.8
     └── visualizador Nginx 1.30.4
 ```
 
@@ -27,7 +27,7 @@ El prototipo ha sido validado con:
 | Rust | 1.97.1 |
 | Cargo | 1.97.1 |
 | OpenCV | 4.13.0 |
-| PostgreSQL | 16.4 |
+| ClickHouse | 24.8 |
 | Edición Rust | 2024 |
 
 También se requieren:
@@ -137,16 +137,16 @@ cp .env.example .env
 La configuración predeterminada es:
 
 ```dotenv
-POSTGRES_DB=little_brother
-POSTGRES_USER=little_brother
-POSTGRES_PASSWORD=change-me
-DB_PORT=5432
-DATABASE_URL=postgresql://little_brother:change-me@127.0.0.1:5432/little_brother
+DMA_JAIVA=http://127.0.0.1:8123
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=
+CLICKHOUSE_DATABASE=temporal
+CLICKHOUSE_HTTP_PORT=8123
 ```
 
-Antes de usar el sistema fuera de un equipo de desarrollo se debe cambiar la
-contraseña. `make` reconstruye `DATABASE_URL` a partir de usuario, contraseña,
-base y puerto; una `DATABASE_URL` pasada explícitamente en la línea de comandos
+`DMA_JAIVA` es la URL del gateway Jaiva→ClickHouse del lab `DMA_JAIVA`. En
+local puede apuntar al HTTP de ClickHouse del compose; en planta debe apuntar
+al proxy Jaiva. Una `DMA_JAIVA` pasada explícitamente en la línea de comandos
 tiene prioridad. El archivo `.env` no debe versionarse.
 
 ## Instalar el modelo YOLO
@@ -169,26 +169,26 @@ El checksum aprobado está documentado en
 usa clases COCO: permite comprobar el flujo técnico, pero no sustituye un
 modelo entrenado para pallets o cajas de la planta.
 
-## Iniciar PostgreSQL
+## Iniciar ClickHouse
 
 ```bash
 make infra-up
 docker compose ps
 ```
 
-PostgreSQL sólo publica el puerto en `127.0.0.1`; no queda expuesto directamente
+ClickHouse sólo publica el puerto en `127.0.0.1`; no queda expuesto directamente
 a la red de planta.
 
-Si `5432` está ocupado:
+Si `8123` está ocupado:
 
 ```bash
-make infra-up DB_PORT=55432
+make infra-up CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
 ```
 
 Use el mismo valor al ejecutar visión:
 
 ```bash
-make vision-smoke DB_PORT=55432
+make vision-smoke CLICKHOUSE_HTTP_PORT=18123 DMA_JAIVA=http://127.0.0.1:18123
 ```
 
 ## Compilar y validar

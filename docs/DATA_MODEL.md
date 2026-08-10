@@ -108,44 +108,42 @@ PersistencePolicy
         ↓
 PersistenceDomain::Temporal
         ↓
-PostgresVisionDetectionWriter
+ClickHouseVisionDetectionWriter
 ```
 
-`vision-core` no conoce el bus, PostgreSQL ni SQL. La composición ocurre en la
+`vision-core` no conoce el bus, ClickHouse ni SQL. La composición ocurre en la
 aplicación `vision-inference` y el SQL permanece dentro del adaptador de
-infraestructura `persistence-postgres`.
+infraestructura `persistence-clickhouse`.
 
 ## Tabla temporal.vision_detection
 
 | Columna | Tipo | Descripción |
 |---|---|---|
-| `event_id` | `TEXT` PK | ID único por sesión y secuencia |
-| `event_type` | `TEXT` | `vision.detection.observed` |
-| `schema_version` | `SMALLINT` | Versión del contrato |
-| `occurred_at` | `TIMESTAMPTZ` | Tiempo real de publicación |
-| `observed_at` | `TIMESTAMPTZ` | Tiempo real de observación |
-| `source_id` | `TEXT` | Cámara lógica |
-| `correlation_id` | `TEXT` | Correlación opcional |
-| `detection_id` | `TEXT` | ID producido por visión |
-| `frame_id` | `BIGINT` | Frame de la fuente |
-| `source_timestamp_ms` | `BIGINT` | Posición temporal dentro del flujo |
-| `class_id` | `INTEGER` | Clase numérica del modelo |
-| `class_name` | `TEXT` | Nombre de clase |
-| `confidence` | `REAL` | Confianza entre 0 y 1 |
-| `bbox_x`, `bbox_y` | `REAL` | Origen normalizado |
-| `bbox_width`, `bbox_height` | `REAL` | Dimensiones normalizadas |
-| `persisted_at` | `TIMESTAMPTZ` | Tiempo de inserción PostgreSQL |
+| `event_id` | `String` | ID único por sesión y secuencia |
+| `event_type` | `LowCardinality(String)` | `vision.detection.observed` |
+| `schema_version` | `Int16` | Versión del contrato |
+| `occurred_at` | `DateTime64(3, 'UTC')` | Tiempo real de publicación |
+| `observed_at` | `DateTime64(3, 'UTC')` | Tiempo real de observación |
+| `source_id` | `LowCardinality(String)` | Cámara lógica |
+| `correlation_id` | `Nullable(String)` | Correlación opcional |
+| `detection_id` | `String` | ID producido por visión |
+| `frame_id` | `Int64` | Frame de la fuente |
+| `source_timestamp_ms` | `Int64` | Posición temporal dentro del flujo |
+| `class_id` | `Int32` | Clase numérica del modelo |
+| `class_name` | `LowCardinality(String)` | Nombre de clase |
+| `confidence` | `Float32` | Confianza entre 0 y 1 |
+| `bbox_x`, `bbox_y` | `Float32` | Origen normalizado |
+| `bbox_width`, `bbox_height` | `Float32` | Dimensiones normalizadas |
+| `persisted_at` | `DateTime64(3, 'UTC')` | Tiempo de inserción ClickHouse |
 
-Índices actuales:
+Ordenación / motor:
 
-- `occurred_at DESC`;
-- `(source_id, occurred_at DESC)`;
-- `(class_id, occurred_at DESC)`.
+- `ENGINE = ReplacingMergeTree(persisted_at)`
+- `ORDER BY (source_id, occurred_at, event_id)`
 
-Las restricciones validan rangos, dimensiones, versión y valores no negativos.
-La migración se ejecuta automáticamente al conectar y usa operaciones
-idempotentes. Las inserciones usan una sentencia preparada dentro de una
-transacción por lotes y `ON CONFLICT (event_id) DO NOTHING`.
+La migración se ejecuta automáticamente al conectar por el gateway Jaiva
+(`DMA_JAIVA`) y usa operaciones idempotentes. Las inserciones van por HTTP
+`JSONEachRow` en lotes.
 
 Antes del adaptador existe una cola acotada. El worker hace flush al completar
 el lote, vencer el intervalo o cerrar el motor. Si una transacción falla, abre
@@ -158,7 +156,7 @@ Para no confundir la posición de un video con una fecha real:
 
 - `occurred_at` y `observed_at` usan el reloj Unix del SP;
 - `source_timestamp_ms` conserva la posición relativa del archivo o flujo;
-- `persisted_at` lo asigna PostgreSQL al insertar.
+- `persisted_at` lo asigna ClickHouse al insertar.
 
 ## Identificadores
 

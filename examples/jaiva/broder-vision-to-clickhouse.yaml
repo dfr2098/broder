@@ -1,0 +1,36 @@
+# Flow de referencia para el lab DMA_JAIVA.
+# Little Brother envía detecciones por HTTP ClickHouse al gateway Jaiva
+# (`DMA_JAIVA`). Este YAML documenta el destino equivalente cuando Jaiva
+# orquesta la escritura con un adaptador ClickHouse / put_database.
+#
+# Uso en DMA_JAIVA:
+#   1. Exponer el HTTP de ClickHouse detrás de Jaiva.
+#   2. Exportar DMA_JAIVA=http://<jaiva-gateway>:8123 (o el puerto del proxy).
+#   3. Arrancar vision-inference sin PostgreSQL.
+
+id: broder-vision-detection-clickhouse
+
+database_connections:
+  clickhouse:
+    type: clickhouse
+    url_env: DMA_JAIVA
+    max_connections: 4
+
+engine:
+  queue_capacity: 256
+  max_concurrency: 2
+  memory:
+    maximum_percent: 42
+
+processors:
+  - id: note
+    type: generate_records
+    config:
+      records:
+        - info: "Las detecciones las inserta broder vía DMA_JAIVA (HTTP ClickHouse)."
+          table: temporal.vision_detection
+
+connections:
+  - from: note
+    relationship: success
+    to: note

@@ -1,7 +1,7 @@
 //! Enrutamiento de persistencia sin dependencias de motores de base de datos.
 //!
-//! PostgreSQL, TimescaleDB o ClickHouse se implementarán como adaptadores de
-//! `PersistenceWriter`, fuera de los núcleos funcionales.
+//! ClickHouse (vía gateway Jaiva / `DMA_JAIVA`) u otros motores se implementan
+//! como adaptadores de `PersistenceWriter`, fuera de los núcleos funcionales.
 
 use std::error::Error;
 use std::fmt::{self, Display};

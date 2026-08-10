@@ -73,12 +73,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?;
     }
 
-    let mut event_publisher = if let Some(database_url) = options.database_url.as_deref() {
+    let mut event_publisher = if let Some(dma_jaiva_url) = options.dma_jaiva_url.as_deref() {
         let (publisher, startup) =
-            VisionEventPublisher::start(database_url, &options.source_id, options.persistence)?;
+            VisionEventPublisher::start(dma_jaiva_url, &options.source_id, options.persistence)?;
         match startup {
             PersistenceStartup::Connected => logger.info(format!(
-                "persistencia asíncrona activa: mode={} queue={} batch={} flush_ms={}",
+                "persistencia ClickHouse vía Jaiva activa: mode={} queue={} batch={} flush_ms={}",
                 options.persistence.mode,
                 options.persistence.queue_capacity,
                 options.persistence.batch_size,
@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some(publisher)
     } else {
-        logger.info("persistencia desactivada: DATABASE_URL no configurada")?;
+        logger.info("persistencia desactivada: DMA_JAIVA no configurada")?;
         None
     };
 

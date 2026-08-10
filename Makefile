@@ -3,12 +3,13 @@
 -include .env
 
 export CCACHE_DISABLE := 1
-POSTGRES_DB ?= little_brother
-POSTGRES_USER ?= little_brother
-POSTGRES_PASSWORD ?= change-me
-DB_PORT ?= 5432
-DATABASE_URL = postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(DB_PORT)/$(POSTGRES_DB)
-export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD DB_PORT DATABASE_URL
+CLICKHOUSE_DATABASE ?= temporal
+CLICKHOUSE_USER ?= default
+CLICKHOUSE_PASSWORD ?=
+CLICKHOUSE_HTTP_PORT ?= 8123
+CLICKHOUSE_NATIVE_PORT ?= 9000
+DMA_JAIVA ?= http://127.0.0.1:$(CLICKHOUSE_HTTP_PORT)
+export CLICKHOUSE_DATABASE CLICKHOUSE_USER CLICKHOUSE_PASSWORD CLICKHOUSE_HTTP_PORT CLICKHOUSE_NATIVE_PORT DMA_JAIVA
 
 OPENCV_VERSION ?= 4.13.0
 OPENCV_LOCAL_PREFIX ?= $(HOME)/.local/opencv-$(OPENCV_VERSION)
@@ -56,7 +57,7 @@ release:
 	cd core/rs && cargo build --release --workspace
 
 doctor:
-	bash scripts/doctor.sh "$(MODEL)" "$(VIDEO)" "$(SPATIAL_CONFIG)" "$(DB_PORT)"
+	bash scripts/doctor.sh "$(MODEL)" "$(VIDEO)" "$(SPATIAL_CONFIG)" "$(CLICKHOUSE_HTTP_PORT)"
 
 opencv-local:
 	bash scripts/install-opencv-local.sh
@@ -93,7 +94,9 @@ vision-logs:
 	tail -n 100 -F "$(VISION_LOG)"
 
 vision-query:
-	docker compose exec -T db psql -U "$${POSTGRES_USER:-little_brother}" -d "$${POSTGRES_DB:-little_brother}" -c "SELECT * FROM temporal.vision_detection ORDER BY occurred_at DESC LIMIT 20;"
+	curl -sS "http://127.0.0.1:$${CLICKHOUSE_HTTP_PORT:-8123}/?database=$${CLICKHOUSE_DATABASE:-temporal}" \
+		--user "$${CLICKHOUSE_USER:-default}:$${CLICKHOUSE_PASSWORD:-}" \
+		--data-binary "SELECT * FROM temporal.vision_detection ORDER BY occurred_at DESC LIMIT 20 FORMAT PrettyCompact"
 
 verify-model:
 	cd core/yolo/models && sha256sum -c SHA256SUMS
@@ -112,13 +115,13 @@ web-logs:
 	docker compose logs -f web
 
 infra-up:
-	docker compose up -d db
+	docker compose up -d clickhouse
 
 infra-down:
 	docker compose down
 
 infra-logs:
-	docker compose logs -f db
+	docker compose logs -f clickhouse
 
 infra-reset:
 	docker compose down -v

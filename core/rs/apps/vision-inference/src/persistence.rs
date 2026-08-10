@@ -7,8 +7,8 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use event_core::{EventBus, EventEnvelope, EventSource, InMemoryEventBus, SourceKind};
+use persistence_clickhouse::ClickHouseVisionDetectionWriter;
 use persistence_core::{PersistenceDomain, PersistencePolicy, PersistenceRouter};
-use persistence_postgres::PostgresVisionDetectionWriter;
 use vision_core::VisionDetection;
 
 use crate::config::{PersistenceConfig, PersistenceMode};
@@ -83,7 +83,7 @@ pub(crate) struct VisionEventPublisher {
 
 impl VisionEventPublisher {
     pub(crate) fn start(
-        database_url: &str,
+        dma_jaiva_url: &str,
         source_id: &str,
         config: PersistenceConfig,
     ) -> Result<(Self, PersistenceStartup), Box<dyn Error>> {
@@ -92,12 +92,12 @@ impl VisionEventPublisher {
         let (startup_sender, startup_receiver) = mpsc::sync_channel(1);
         let metrics = Arc::new(SharedMetrics::default());
         let worker_metrics = metrics.clone();
-        let database_url = database_url.to_owned();
+        let dma_jaiva_url = dma_jaiva_url.to_owned();
         let worker = thread::Builder::new()
             .name("vision-persistence".to_owned())
             .spawn(move || {
                 worker_loop(
-                    &database_url,
+                    &dma_jaiva_url,
                     config,
                     receiver,
                     startup_sender,
@@ -215,13 +215,13 @@ impl Drop for VisionEventPublisher {
 }
 
 fn worker_loop(
-    database_url: &str,
+    dma_jaiva_url: &str,
     config: PersistenceConfig,
     receiver: Receiver<WorkerCommand>,
     startup: SyncSender<WorkerStartup>,
     metrics: Arc<SharedMetrics>,
 ) -> Result<(), String> {
-    let mut bus = match connect_bus(database_url, config.batch_size) {
+    let mut bus = match connect_bus(dma_jaiva_url, config.batch_size) {
         Ok(bus) => {
             metrics.connected.store(true, Ordering::Relaxed);
             let _ = startup.send(WorkerStartup::Connected);
@@ -248,7 +248,7 @@ fn worker_loop(
                 metrics.queued.fetch_sub(1, Ordering::Relaxed);
                 if bus.is_none() && last_reconnect_attempt.elapsed() >= interval {
                     last_reconnect_attempt = Instant::now();
-                    if let Ok(new_bus) = connect_bus(database_url, config.batch_size) {
+                    if let Ok(new_bus) = connect_bus(dma_jaiva_url, config.batch_size) {
                         metrics.connected.store(true, Ordering::Relaxed);
                         bus = Some(new_bus);
                     }
@@ -281,7 +281,7 @@ fn worker_loop(
             Err(RecvTimeoutError::Timeout) => {
                 if bus.is_none() {
                     last_reconnect_attempt = Instant::now();
-                    if let Ok(new_bus) = connect_bus(database_url, config.batch_size) {
+                    if let Ok(new_bus) = connect_bus(dma_jaiva_url, config.batch_size) {
                         metrics.connected.store(true, Ordering::Relaxed);
                         bus = Some(new_bus);
                     }
@@ -294,10 +294,11 @@ fn worker_loop(
 }
 
 fn connect_bus(
-    database_url: &str,
+    dma_jaiva_url: &str,
     batch_size: usize,
 ) -> Result<InMemoryEventBus<VisionDetection>, Box<dyn Error>> {
-    let writer = PostgresVisionDetectionWriter::connect_with_batch_size(database_url, batch_size)?;
+    let writer =
+        ClickHouseVisionDetectionWriter::connect_with_batch_size(dma_jaiva_url, batch_size)?;
     let mut router = PersistenceRouter::new(VisionTemporalPolicy);
     router.register(writer);
     let mut bus = InMemoryEventBus::new();
