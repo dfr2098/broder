@@ -8,7 +8,7 @@
 | 2 | Inferencia YOLO | Implementada con OpenCV DNN, ONNX, 5 FPS y NMS |
 | 3 | Seguimiento e identidad | Implementada |
 | 4 | Modelo espacial | Implementada con configuración DEMO |
-| 5 | Bus, router y PostgreSQL temporal | Implementada para `VisionDetection` |
+| 5 | Bus, router y ClickHouse temporal | Implementada para `VisionDetection` |
 
 ## Fase 1: modelo físico
 
@@ -24,7 +24,7 @@ Implementado:
 - repositorio en memoria y simulador.
 
 Límite actual: el modelo de transportadores todavía no se persiste en
-PostgreSQL y no recibe información de fuentes industriales.
+ClickHouse y no recibe información de fuentes industriales.
 
 ## Fase 2: inferencia YOLO
 
@@ -77,7 +77,7 @@ Límite actual: las coordenadas siguen normalizadas en la imagen. No existe
 homografía, calibración métrica ni conversión a metros. La geometría incluida es
 demostrativa y el video de prueba no tiene una cámara fija.
 
-## Fase 5: bus y PostgreSQL
+## Fase 5: bus y ClickHouse
 
 Implementado:
 
@@ -86,7 +86,7 @@ Implementado:
 - entrega asíncrona mediante cola acotada;
 - política de dominio temporal;
 - `PersistenceRouter` independiente del motor de base;
-- adaptador PostgreSQL separado;
+- adaptador ClickHouse separado;
 - esquema `temporal` y tabla `vision_detection`;
 - migración automática idempotente;
 - inserción preparada con columnas tipadas y transacciones por lotes;
@@ -107,7 +107,7 @@ Extensión operativa implementada:
 - frames JPEG, detecciones, tracks, geometría espacial y métricas;
 - varios navegadores mediante un canal broadcast acotado;
 - endpoint de salud HTTP;
-- ejecución opcional e independiente de PostgreSQL.
+- ejecución opcional e independiente de ClickHouse.
 
 Límite actual: sólo se persisten detecciones. La cola vive en memoria y no
 sobrevive a una caída completa del proceso. No existe política de retención.
@@ -128,7 +128,7 @@ No están implementados:
 - correlación entre visión y señales industriales;
 - bus durable como NATS, Kafka o Redis Streams;
 - persistencia de tracks, resultados espaciales o modelo operativo;
-- ClickHouse o TimescaleDB;
+- ClickHouse (ya activo) o TimescaleDB;
 - usuarios, permisos y dashboard histórico o multicámara;
 - reidentificación entre cámaras;
 - almacenamiento o compresión de video;
@@ -142,7 +142,7 @@ Antes de implementar alarmas conviene cerrar, en este orden:
 1. calibración de una cámara fija y correspondencia píxel–metro;
 2. modelo YOLO entrenado y validado con pallets/cajas reales;
 3. persistencia de `VisionTrack` y `SpatialTrack` como eventos separados;
-4. bus asíncrono con cola limitada y escritura PostgreSQL por lotes;
+4. bus asíncrono con cola limitada y escritura ClickHouse vía Jaiba por lotes;
 5. cálculo de velocidad y dirección con tolerancias configurables;
 6. reglas de desalineación y permanencia;
 7. correlación con telegramas;

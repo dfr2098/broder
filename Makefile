@@ -3,12 +3,18 @@
 -include .env
 
 export CCACHE_DISABLE := 1
+DMA_JAIVA ?= http://127.0.0.1:19090
+CLICKHOUSE_DATABASE ?= temporal
+CLICKHOUSE_USER ?= default
+CLICKHOUSE_PASSWORD ?=
+CLICKHOUSE_HTTP_PORT ?= 8123
+CLICKHOUSE_NATIVE_PORT ?= 9000
 POSTGRES_DB ?= little_brother
 POSTGRES_USER ?= little_brother
 POSTGRES_PASSWORD ?= change-me
 DB_PORT ?= 5432
-DATABASE_URL = postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(DB_PORT)/$(POSTGRES_DB)
-export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD DB_PORT DATABASE_URL
+export DMA_JAIVA CLICKHOUSE_DATABASE CLICKHOUSE_USER CLICKHOUSE_PASSWORD CLICKHOUSE_HTTP_PORT CLICKHOUSE_NATIVE_PORT
+export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD DB_PORT
 
 OPENCV_VERSION ?= 4.13.0
 OPENCV_LOCAL_PREFIX ?= $(HOME)/.local/opencv-$(OPENCV_VERSION)
@@ -33,7 +39,7 @@ TRACK_MAX_MISSED ?= 5
 TRACK_MAX_LOST_MS ?= 1500
 TRACK_MIN_IOU ?= 0.05
 TRACK_MAX_DISTANCE ?= 0.25
-PERSISTENCE_MODE ?= required
+PERSISTENCE_MODE ?= best-effort
 PERSISTENCE_QUEUE ?= 256
 PERSISTENCE_BATCH ?= 25
 PERSISTENCE_FLUSH_MS ?= 500
@@ -56,7 +62,7 @@ release:
 	cd core/rs && cargo build --release --workspace
 
 doctor:
-	bash scripts/doctor.sh "$(MODEL)" "$(VIDEO)" "$(SPATIAL_CONFIG)" "$(DB_PORT)"
+	bash scripts/doctor.sh "$(MODEL)" "$(VIDEO)" "$(SPATIAL_CONFIG)"
 
 opencv-local:
 	bash scripts/install-opencv-local.sh
@@ -93,7 +99,10 @@ vision-logs:
 	tail -n 100 -F "$(VISION_LOG)"
 
 vision-query:
-	docker compose exec -T db psql -U "$${POSTGRES_USER:-little_brother}" -d "$${POSTGRES_DB:-little_brother}" -c "SELECT * FROM temporal.vision_detection ORDER BY occurred_at DESC LIMIT 20;"
+	@echo "Histórico opcional (ClickHouse local; Jaiba escribe si el DAG lo pide):"
+	curl -sS "http://127.0.0.1:$${CLICKHOUSE_HTTP_PORT:-8123}/?database=$${CLICKHOUSE_DATABASE:-temporal}" \
+		--user "$${CLICKHOUSE_USER:-default}:$${CLICKHOUSE_PASSWORD:-}" \
+		--data-binary "SELECT * FROM temporal.vision_detection ORDER BY occurred_at DESC LIMIT 20 FORMAT PrettyCompact"
 
 verify-model:
 	cd core/yolo/models && sha256sum -c SHA256SUMS
@@ -111,14 +120,15 @@ web-down:
 web-logs:
 	docker compose logs -f web
 
+# ClickHouse + Postgres opcionales para sinks de Jaiba (no requeridos por Broder).
 infra-up:
-	docker compose up -d db
+	docker compose up -d clickhouse db
 
 infra-down:
 	docker compose down
 
 infra-logs:
-	docker compose logs -f db
+	docker compose logs -f clickhouse db
 
 infra-reset:
 	docker compose down -v

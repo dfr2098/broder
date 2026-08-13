@@ -2,8 +2,12 @@
 
 Little Brother es una plataforma de observabilidad industrial. El prototipo
 actual cubre el modelo físico de transportadores, inferencia YOLO, tracking,
-interpretación espacial y persistencia temporal de detecciones en PostgreSQL.
+interpretación espacial y entrega fire-and-forget de detecciones a **Jaiba**;
+las DB son sinks opcionales detrás de Jaiba, no del runtime de Broder.
 Permanece independiente de PLC, WMS y fabricantes específicos.
+
+Alcance de conectividad: ver [`docs/BRIEF_DMA_JAIVA_JAIBA_BRODER.md`](docs/BRIEF_DMA_JAIVA_JAIBA_BRODER.md)
+(Jaiba ≠ lab DMA_JAIVA ≠ Broder).
 
 ## Documentación
 
@@ -21,7 +25,7 @@ La guía completa comienza en [`docs/README.md`](docs/README.md):
 ```text
 core/rs/crates/event-core        Contratos del bus de eventos
 core/rs/crates/persistence-core  Puertos y router de persistencia
-core/rs/crates/persistence-postgres  Adaptador temporal PostgreSQL
+core/rs/crates/jaiba-bridge            Puente Broder → Jaiba (sin drivers de DB)
 core/rs/crates/transport-core    Dominio físico de transportadores
 core/rs/crates/vision-core       Detecciones, muestreo y NMS neutrales
 core/rs/crates/tracking-core     Identidad temporal y trayectorias visuales
@@ -30,22 +34,23 @@ core/rs/apps/transport-simulator Simulador local
 core/rs/apps/video-viewer        Visor provisional de videos
 core/rs/apps/vision-inference    Motor YOLO 11 con OpenCV DNN
 core/yolo/models                 Modelos ONNX locales
-docker-compose.yml               PostgreSQL de infraestructura
+docker-compose.yml               Nginx + sinks opcionales CH/PG para Jaiba
 ```
 
 Los procesos Rust se ejecutan directamente en el SP o equipo de planta.
-PostgreSQL y el visualizador Nginx se ejecutan en contenedores. PostgreSQL se
-conecta al proceso mediante el bus de eventos y `PersistenceRouter`; el panel
-recibe los WebSockets mediante un proxy hacia `vision-inference`. Los núcleos
-visuales no conocen SQL ni Nginx.
+El visualizador Nginx corre en contenedor. ClickHouse/PostgreSQL en Compose
+son **opcionales** (sinks para Jaiba vía DAG). Broder solo entrega
+`EventEnvelope` al ingest Jaiba (env `DMA_JAIVA` = URL legado). El lab KPI
+`DMA_JAIVA` es un circuito aparte. El panel recibe WebSockets vía proxy hacia
+`vision-inference`. Los núcleos no conocen SQL, drivers ni Nginx.
 
 ## Comprobar el proyecto
 
-Diagnosticar dependencias, archivos y PostgreSQL:
+Diagnosticar dependencias, archivos y Jaiba:
 
 ```bash
 make doctor
-make doctor DB_PORT=55432  # cuando se usa el puerto alternativo
+make doctor  # comprueba DMA_JAIVA si está definida
 ```
 
 Ejecutar todas las pruebas:
@@ -104,7 +109,7 @@ make demo-web
 
 Después abra `http://127.0.0.1:8088`. El comando utiliza exclusivamente el MP4
 incluido en `video prueba/`; el panel muestra el video, cajas, identificadores
-de track, zonas y métricas sin requerir PostgreSQL. El MP4 se repite hasta que
+de track, zonas y métricas sin requerir ClickHouse. El MP4 se repite hasta que
 el usuario detiene el motor con `Ctrl+C`.
 
 Ejecutarlo sin ventana o realizar una prueba corta de seis inferencias:
@@ -203,55 +208,40 @@ Compilar los binarios optimizados para el SP:
 make release
 ```
 
-## Fase 5: persistencia PostgreSQL
+## Fase 5: puente Jaiba (fire-and-forget)
 
-Crear la configuración local e iniciar PostgreSQL:
+Opcional: levantar sinks locales para que Jaiba pueda persistir, o apuntar
+`DMA_JAIVA` (env legado) al ingest Jaiba:
 
 ```bash
 cp .env.example .env
-make infra-up
+make infra-up   # CH + PG opcionales; Broder no los requiere para correr
 ```
 
 `make vision`, `make vision-headless` y `make vision-smoke` leen
-`DATABASE_URL` y envían cada `VisionDetection` a un worker de persistencia. El
-worker usa una cola acotada, transacciones por lotes, flush periódico y
-reconexión. El esquema y los índices se crean de manera idempotente.
+`DMA_JAIVA` y entregan cada `EventEnvelope` a Jaiba sin esperar confirmación
+de base de datos. El hilo de video nunca se bloquea por Jaiba ni por un INSERT.
 
 ```text
 mode=required queue=256 batch=25 flush_ms=500
 ```
 
-Para mantener la visión activa cuando PostgreSQL no esté disponible:
+Por defecto el modo es `best-effort`. Si Jaiba no está disponible:
 
 ```bash
 make vision PERSISTENCE_MODE=best-effort
 ```
 
-Consultar las últimas veinte detecciones:
+Broder no consulta bases de datos. El histórico, si existe, se lee desde el
+sink que Jaiba haya escrito (p. ej. ClickHouse local vía `make vision-query`).
 
 ```bash
 make vision-query
 ```
 
-O ejecutar directamente:
+Para ejecutar sin entregar eventos a Jaiba: `--no-persistence`.
 
-```sql
-SELECT *
-FROM temporal.vision_detection
-ORDER BY occurred_at DESC;
-```
-
-Si `5432` ya está ocupado, se puede cambiar el puerto sin modificar archivos:
-
-```bash
-make infra-up DB_PORT=55432
-make vision DB_PORT=55432
-```
-
-Para ejecutar el motor provisionalmente sin PostgreSQL, se puede usar el
-binario con `--no-persistence`.
-
-Detenerla sin eliminar sus datos:
+Detener sinks opcionales sin eliminar sus datos:
 
 ```bash
 make infra-down

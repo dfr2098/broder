@@ -10,8 +10,11 @@ SP / equipo de planta
 ├── OpenCV instalado localmente
 ├── modelo YOLO ONNX almacenado localmente
 └── Docker o Podman
-    ├── PostgreSQL 16.4
-    └── visualizador Nginx 1.30.4
+    ├── visualizador Nginx 1.30.4
+    └── (opcional) ClickHouse + PostgreSQL como sinks para Jaiba
+
+Jaiba (ingest) es externo. Las DB no son obligatorias para Broder.
+El lab KPI DMA_JAIVA es un circuito aparte (no este camino).
 ```
 
 El motor de visión no se ejecuta dentro de un contenedor. Esto permite acceso
@@ -27,7 +30,6 @@ El prototipo ha sido validado con:
 | Rust | 1.97.1 |
 | Cargo | 1.97.1 |
 | OpenCV | 4.13.0 |
-| PostgreSQL | 16.4 |
 | Edición Rust | 2024 |
 
 También se requieren:
@@ -137,17 +139,14 @@ cp .env.example .env
 La configuración predeterminada es:
 
 ```dotenv
-POSTGRES_DB=little_brother
-POSTGRES_USER=little_brother
-POSTGRES_PASSWORD=change-me
-DB_PORT=5432
-DATABASE_URL=postgresql://little_brother:change-me@127.0.0.1:5432/little_brother
+DMA_JAIVA=http://127.0.0.1:19090
+JAIBA_TOKEN=
+JAIBA_INGEST_PATH=/api/v1/ingest/events
 ```
 
-Antes de usar el sistema fuera de un equipo de desarrollo se debe cambiar la
-contraseña. `make` reconstruye `DATABASE_URL` a partir de usuario, contraseña,
-base y puerto; una `DATABASE_URL` pasada explícitamente en la línea de comandos
-tiene prioridad. El archivo `.env` no debe versionarse.
+`DMA_JAIVA` es la URL base del ingest Jaiba (nombre de variable legado). No
+implica el lab KPI `DMA_JAIVA`. Broder no conoce drivers ni credenciales de
+bases de datos. El archivo `.env` no debe versionarse.
 
 ## Instalar el modelo YOLO
 
@@ -169,26 +168,29 @@ El checksum aprobado está documentado en
 usa clases COCO: permite comprobar el flujo técnico, pero no sustituye un
 modelo entrenado para pallets o cajas de la planta.
 
-## Iniciar PostgreSQL
+## Conectar Jaiba (opcional)
+
+`make infra-up` levanta ClickHouse + PostgreSQL como **sinks opcionales** para
+que Jaiba pueda persistir en lab local. Broder / visión funcionan sin ellos.
 
 ```bash
 make infra-up
 docker compose ps
 ```
 
-PostgreSQL sólo publica el puerto en `127.0.0.1`; no queda expuesto directamente
+ClickHouse sólo publica el puerto en `127.0.0.1`; no queda expuesto directamente
 a la red de planta.
 
-Si `5432` está ocupado:
+Si el ingest Jaiba usa otro host/puerto:
 
 ```bash
-make infra-up DB_PORT=55432
+export DMA_JAIVA=http://127.0.0.1:19090
 ```
 
 Use el mismo valor al ejecutar visión:
 
 ```bash
-make vision-smoke DB_PORT=55432
+make vision-smoke
 ```
 
 ## Compilar y validar

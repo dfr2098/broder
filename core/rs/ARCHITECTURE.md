@@ -40,13 +40,14 @@ flowchart LR
     BUS --> ALT[Motor de alertas]
     BUS --> ANA[Analítica e IA]
 
-    PER --> PG[(PostgreSQL<br/>estado operativo)]
-    PER --> REL[(PostgreSQL<br/>relaciones físicas)]
-    PER --> TEMP[(PostgreSQL<br/>histórico temporal actual)]
+    PER --> PG[(PostgreSQL vía Jaiba<br/>estado operativo, opcional)]
+    PER --> REL[(PostgreSQL vía Jaiba<br/>relaciones físicas, opcional)]
+    PER --> TEMP[(ClickHouse vía Jaiba<br/>histórico temporal, opcional)]
 ```
 
 Los conectores no conocen bases de datos. Un conector transforma su protocolo
 particular en un `EventEnvelope` normalizado y lo publica mediante `EventBus`.
+Las DB son sinks opcionales detrás de Jaiba, no el esqueleto de Broder.
 
 ## Límites de los crates
 
@@ -65,11 +66,15 @@ depende de `event-core`, PostgreSQL, ClickHouse ni protocolos externos.
 Consume eventos y los clasifica en dominios operativo, temporal o relacional.
 Solo define puertos; no contiene SQL ni depende de un motor concreto.
 
-### `persistence-postgres`
+### `jaiba-bridge`
 
-Es el adaptador de infraestructura que implementa `PersistenceWriter` para las
-detecciones visuales temporales. Conoce PostgreSQL, la migración y la consulta
-preparada; ningún núcleo funcional depende de este crate.
+Es el adaptador de infraestructura que entrega `EventEnvelope` a Jaiba por
+HTTP ingest (env `DMA_JAIVA` = URL base, nombre legado). No conoce drivers,
+credenciales ni motores de base de datos. Jaiba bufferiza y enruta según su
+DAG: sinks recomendados ClickHouse (histórico) y PostgreSQL (config); otros
+(LLM, alertas, drop, Oracle/Odoo-WMS, …) son opcionales. Broder funciona sin
+DB. El lab KPI `DMA_JAIVA` es un circuito aparte. Ningún núcleo funcional
+depende de este crate.
 
 ### `vision-core`
 
@@ -225,7 +230,7 @@ calibración específica de su escena.
 Esta fase no calcula velocidad, no detecta fallas, no genera alarmas y no
 persiste resultados.
 
-## Fase 5: bus y persistencia temporal PostgreSQL
+## Fase 5: bus y persistencia temporal ClickHouse (Jaiba)
 
 ```mermaid
 flowchart LR
@@ -235,13 +240,13 @@ flowchart LR
     WORKER --> BUS{{InMemoryEventBus}}
     BUS --> ROUTER[PersistenceRouter]
     ROUTER --> POLICY{Dominio temporal}
-    POLICY --> WRITER[PostgresVisionDetectionWriter]
+    POLICY --> WRITER[JaibaVisionDetectionWriter]
     WRITER --> TABLE[(temporal.vision_detection)]
 ```
 
 La aplicación compone las implementaciones, pero el motor YOLO únicamente
 produce `VisionDetection`. La política selecciona el dominio temporal y el
-adaptador PostgreSQL realiza una inserción preparada con columnas tipadas. No
+adaptador Jaiba entrega lotes JSON al ingest. No
 se usa un documento JSON para este flujo.
 
 ```text
@@ -261,7 +266,7 @@ una secuencia para evitar colisiones al reiniciar la cámara o reprocesar un
 archivo.
 
 La entrega desde video es asíncrona mediante una cola acotada. Dentro del worker
-el bus y el router son síncronos, y PostgreSQL confirma transacciones por lote,
+el bus y el router son síncronos en el worker, y Jaiba acepta lotes (202);
 intervalo o cierre. El escritor reconecta y reintenta una vez. Un bus durable
 podrá reemplazar esta cola sin modificar `vision-core`.
 
@@ -271,13 +276,14 @@ alarmas y reglas industriales permanecen fuera de su alcance.
 ## Evolución de persistencia
 
 ```text
-Actual: PostgreSQL temporal para VisionDetection
-Siguiente: PostgreSQL operativo y relacional + eventos de track/espacio
-Escala: ClickHouse/Timescale para histórico + consumidores analíticos
+Actual: Broder → Jaiba (fire-and-forget) para VisionDetection
+Siguiente: Jaiba DAG enruta sinks opcionales (recomendados: CH histórico, PG config)
+Escala: consumidores analíticos sobre sinks detrás de Jaiba (p. ej. ClickHouse)
 ```
 
-El cambio de fase solo reemplaza o agrega implementaciones de
-`PersistenceWriter`. Los conectores, eventos y entidades no cambian.
+Broder no habla con DB. El cambio de fase solo reemplaza o agrega
+implementaciones de `PersistenceWriter`. Los conectores, eventos y entidades
+no cambian.
 
 ## Flujo de decisión de persistencia
 
@@ -295,9 +301,9 @@ flowchart TD
     HIS -->|Sí| HISW[Temporal writer]
     GRA -->|Sí| GRAW[Relational writer]
 
-    OPW --> PG[(PostgreSQL)]
-    HISW --> TS[(PostgreSQL actual<br/>ClickHouse / TimescaleDB futuro)]
-    GRAW --> GRAPH[(PostgreSQL / grafo futuro)]
+    OPW --> PG[(Jaiba → PostgreSQL u otro sink)]
+    HISW --> TS[(Jaiba → ClickHouse u otro sink)]
+    GRAW --> GRAPH[(Jaiba → PostgreSQL u otro sink)]
 
     OP -->|No| END[Sin escritura en ese dominio]
     HIS -->|No| END
@@ -334,21 +340,26 @@ sequenceDiagram
 
 ## Evolución de despliegue
 
+Broder siempre entrega a Jaiba; las bases de datos no vuelven a ser clientes
+directos del binario. La escala añade sinks detrás de Jaiba, no drivers en Broder.
+
 ```mermaid
 flowchart LR
     subgraph F1[Etapa actual]
-        B1[Little Brother] --> P1[(PostgreSQL temporal)]
+        B1[Little Brother] --> J1[(Jaiba ingest)]
     end
 
-    subgraph F2[Etapa de escala temporal]
-        B2[Little Brother] --> P2[(PostgreSQL operativo)]
-        B2 --> C2[(ClickHouse)]
+    subgraph F2[Etapa con histórico opcional]
+        B2[Little Brother] --> J2[(Jaiba)]
+        J2 --> C2[(ClickHouse)]
+        J2 --> P2[(PostgreSQL)]
     end
 
     subgraph F3[Etapa analítica]
-        B3[Little Brother] --> P3[(PostgreSQL)]
-        B3 --> C3[(ClickHouse)]
-        B3 --> A3[Motor analítico]
+        B3[Little Brother] --> J3[(Jaiba)]
+        J3 --> C3[(ClickHouse)]
+        J3 --> P3[(PostgreSQL / otros sinks)]
+        J3 --> A3[LLM / alertas]
     end
 
     B1 -. evolución .-> B2
@@ -361,10 +372,11 @@ Los núcleos Rust **no se ejecutan en contenedores**. Se compilan y ejecutan de
 forma nativa en el SP o equipo de planta para evitar sobrecarga y conservar
 acceso directo al hardware, red industrial y recursos locales.
 
-Las bases de datos y el visualizador Nginx sí se ejecutan en contenedores. El
-frontend reenvía el WebSocket al proceso nativo; esta diferencia de despliegue
-no atraviesa el dominio y los núcleos continúan utilizando puertos y adaptadores
-abstractos.
+ClickHouse/PostgreSQL en Compose son **infra opcional para sinks de Jaiba**, no
+el esqueleto runtime de Broder. El visualizador Nginx sí se ejecuta en
+contenedor. El frontend reenvía el WebSocket al proceso nativo; esta diferencia
+de despliegue no atraviesa el dominio y los núcleos continúan utilizando
+puertos y adaptadores abstractos.
 
 ```mermaid
 flowchart LR
@@ -382,7 +394,7 @@ flowchart LR
         Q[Cola acotada]
         PW[Worker de persistencia]
         PR[PersistenceRouter]
-        PGA[persistence-postgres]
+        PGA[jaiba-bridge]
 
         CON -. futuros conectores .-> NOR
         NOR -. eventos futuros .-> BUS
@@ -395,30 +407,32 @@ flowchart LR
         BUS --> PR --> PGA
     end
 
-    subgraph DOCKER[Contenedores de infraestructura]
-        PG[(PostgreSQL)]
+    subgraph DOCKER[Contenedores opcionales / externos]
+        JB[(Jaiba ingest)]
+        CH[(ClickHouse sink opcional)]
+        PG[(PostgreSQL sink opcional)]
         WEB[Visualizador Nginx]
-        CH[(ClickHouse futuro)]
     end
 
-    PGA -->|detección temporal actual| PG
-    BUS -.->|adaptador histórico futuro| CH
+    PGA -->|EventEnvelope fire-and-forget| JB
+    JB -.->|DAG opcional| CH
+    JB -.->|DAG opcional| PG
     WSB -->|HTTP/WebSocket :8081| WEB
     WEB -->|HTTP :8088| BROWSER[Navegador local o de planta]
 ```
 
 El backend web actual es una salida operativa en vivo y no un consumidor durable
 del bus. Recibe el resultado compuesto dentro de `vision-inference`, distribuye
-los frames mediante un canal broadcast acotado y no consulta PostgreSQL. Nginx
+los frames mediante un canal broadcast acotado y no consulta Jaiba/DB. Nginx
 sirve los recursos estáticos y actúa como proxy WebSocket. Un dashboard
 histórico o multicámara continúa siendo una evolución futura.
 
 Flujo de operación del prototipo:
 
 ```text
-SP nativo:       binarios Rust y backend WebSocket
-Infraestructura: PostgreSQL y visualizador Nginx en Docker Compose
-Futuro:          ClickHouse en Docker Compose
+SP nativo:       binarios Rust y backend WebSocket (sin DB obligatoria)
+Infraestructura: Jaiba externo; CH/PG opcionales como sinks de Jaiba; Nginx en Compose
+Nota:          lab DMA_JAIVA (KPI) es un circuito aparte, no este camino
 ```
 
 Para producción, los binarios Rust podrán administrarse como servicios del
@@ -428,15 +442,13 @@ la ruta de procesamiento.
 ## Adaptadores de infraestructura
 
 Los adaptadores concretos viven en crates separados de los núcleos. El primero
-es `persistence-postgres`; los siguientes pueden conservar el mismo patrón:
+es `jaiba-bridge`; los siguientes pueden conservar el mismo patrón:
 
 ```text
 crates/
-├── persistence-postgres  # actual
-├── bus-nats              # futuro
-├── postgres-operational  # futuro
-├── postgres-relational   # futuro
-└── clickhouse-temporal   # futuro
+├── jaiba-bridge   # actual (solo Jaiba)
+├── bus-nats       # futuro
+└── …
 ```
 
 El bus y la cola actuales viven en memoria. Proporcionan aislamiento,

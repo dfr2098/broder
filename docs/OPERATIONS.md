@@ -20,8 +20,8 @@ Todos los comandos de esta guía se ejecutan desde la raíz del repositorio.
 | `TRACK_MAX_LOST_MS` | `1500` | Tiempo máximo sin observación |
 | `TRACK_MIN_IOU` | `0.05` | IoU mínima de asociación |
 | `TRACK_MAX_DISTANCE` | `0.25` | Distancia normalizada máxima |
-| `DB_PORT` | `5432` | Puerto local de PostgreSQL |
-| `DATABASE_URL` | construida desde `.env` | Conexión usada por Rust |
+| `DMA_JAIVA` | `http://127.0.0.1:19090` | URL base del ingest Jaiba (env legado; ≠ lab KPI DMA) |
+| `JAIBA_TOKEN` | vacío | Bearer opcional para el ingest |
 | `PERSISTENCE_MODE` | `required` | `required` o `best-effort` |
 | `PERSISTENCE_QUEUE` | `256` | Eventos máximos esperando al worker |
 | `PERSISTENCE_BATCH` | `25` | Detecciones por transacción |
@@ -33,7 +33,10 @@ Las variables pueden pasarse a `make` sin modificar archivos:
 make vision FPS=5 CONFIDENCE=0.40 SOURCE_ID=cam-entrada
 ```
 
-## Infraestructura PostgreSQL
+## Infraestructura opcional (sinks Jaiba; Broder sin DB obligatoria)
+
+`make infra-up` levanta ClickHouse + PostgreSQL para que Jaiba los use como
+sinks de laboratorio. No son el runtime skeleton de Broder.
 
 Iniciar, inspeccionar logs y detener:
 
@@ -44,7 +47,7 @@ make infra-down
 ```
 
 `make infra-down` conserva el volumen. El siguiente comando elimina el
-contenedor y también todos los datos del volumen PostgreSQL:
+contenedor y también todos los datos del volumen ClickHouse:
 
 ```bash
 make infra-reset
@@ -53,11 +56,11 @@ make infra-reset
 Use `infra-reset` únicamente cuando la pérdida total de los datos sea
 intencional.
 
-Comprobar instalación, archivos y coherencia del puerto PostgreSQL:
+Comprobar instalación, archivos y coherencia del puerto ClickHouse:
 
 ```bash
 make doctor
-make doctor DB_PORT=55432
+make doctor
 ```
 
 ## Visor provisional
@@ -125,7 +128,7 @@ Prueba corta de seis inferencias:
 make vision-smoke
 ```
 
-Si PostgreSQL todavía no está disponible y solo se quiere comprobar el video y
+Si ClickHouse todavía no está disponible y solo se quiere comprobar el video y
 el motor, se puede permitir que la prueba continúe sin conexión:
 
 ```bash
@@ -147,7 +150,7 @@ make vision-logs
 El visualizador se ejecuta en un contenedor Nginx. Sirve la interfaz y hace
 proxy de `/ws` y `/health` hacia el backend nativo de `vision-inference`, que
 transmite cada frame procesado como JPEG junto con detecciones, tracking, zonas
-y métricas. El flujo no consulta PostgreSQL.
+y métricas. El flujo no consulta ClickHouse.
 
 Iniciar la demostración local con el video incluido:
 
@@ -181,7 +184,7 @@ Rutas disponibles:
 | `/health` | Estado HTTP y cantidad de clientes conectados |
 
 El comando `demo-web` utiliza `--no-persistence` para que la demostración no
-dependa de PostgreSQL. Para combinar el panel con persistencia se puede
+dependa de ClickHouse. Para combinar el panel con persistencia se puede
 ejecutar directamente `vision-inference` con `--web-bind` y la configuración
 normal de base de datos.
 
@@ -242,7 +245,7 @@ cargo run --manifest-path core/rs/Cargo.toml -p vision-inference -- --help
 | `--track-max-lost-ms N` | Tiempo máximo sin observación |
 | `--track-min-iou N` | IoU mínima para asociación |
 | `--track-max-distance N` | Distancia normalizada máxima |
-| `--database-url URL` | Conexión PostgreSQL explícita |
+| `--database-url URL` | Conexión ClickHouse explícita |
 | `--no-persistence` | Omite la conexión y las escrituras |
 | `--persistence-mode MODO` | `required` o `best-effort` |
 | `--persistence-queue N` | Capacidad acotada de la cola |
@@ -257,7 +260,7 @@ cargo run --manifest-path core/rs/Cargo.toml -p video-viewer -- --help
 ```
 
 La persistencia se ejecuta en un worker independiente. `required` aplica
-backpressure cuando se llena la cola y termina con error si PostgreSQL no se
+backpressure cuando se llena la cola y termina con error si ClickHouse no se
 recupera. `best-effort` mantiene la visión activa, reintenta la conexión y
 contabiliza los eventos descartados:
 
@@ -377,7 +380,7 @@ METRICS         FPS efectivo y latencia media/máxima de inferencia
 
 El resumen final incluye frames capturados, inferencias, detecciones,
 detecciones persistidas, descartadas y tracks finalizados. Una detección sólo
-cuenta como persistida después del commit PostgreSQL.
+cuenta como persistida después del commit ClickHouse.
 
 ## Verificación del proyecto
 
@@ -391,10 +394,10 @@ make release
 
 Las pruebas cubren bus, flush y router, topología y movimientos, muestreo y
 NMS, tracking, geometría espacial, política de persistencia, redacción de
-secretos y conversiones PostgreSQL. La integración real se valida mediante
+secretos y conversiones ClickHouse. La integración real se valida mediante
 `make vision-smoke` seguido de `make vision-query`.
 
-## Consultas PostgreSQL
+## Consultas ClickHouse
 
 Últimas veinte detecciones:
 
@@ -402,10 +405,10 @@ secretos y conversiones PostgreSQL. La integración real se valida mediante
 make vision-query
 ```
 
-Entrar a `psql`:
+Entrar a `curl ClickHouse HTTP`:
 
 ```bash
-docker compose exec db psql -U little_brother -d little_brother
+docker compose exec db curl ClickHouse HTTP -U little_brother -d little_brother
 ```
 
 Consultas útiles:
@@ -438,11 +441,11 @@ ORDER BY minute DESC;
 
 ## Diagnóstico
 
-### El puerto 5432 está ocupado
+### El puerto 8123 está ocupado
 
 ```bash
-make infra-up DB_PORT=55432
-make vision DB_PORT=55432
+export DMA_JAIVA=http://127.0.0.1:19090
+make vision
 ```
 
 ### No se encuentra OpenCV
@@ -468,14 +471,15 @@ ls -lh core/yolo/models/yolo11n.onnx
 make verify-model
 ```
 
-### PostgreSQL no responde
+### ClickHouse no responde
 
 ```bash
 docker compose ps
 make infra-logs
 ```
 
-Confirme que `DB_PORT` y el puerto contenido en `DATABASE_URL` sean iguales.
+Confirme que `DMA_JAIVA` apunta al ingest Jaiba y que responde 2xx.
+ClickHouse local (`make infra-up`) solo importa si el DAG de Jaiba escribe ahí.
 
 ### YOLO identifica una clase incorrecta
 

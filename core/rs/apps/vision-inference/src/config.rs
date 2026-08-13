@@ -45,7 +45,7 @@ pub(crate) struct Options {
     pub model: PathBuf,
     pub classes: Option<PathBuf>,
     pub spatial_config: Option<PathBuf>,
-    pub database_url: Option<String>,
+    pub dma_jaiva_url: Option<String>,
     pub persistence: PersistenceConfig,
     pub log_path: PathBuf,
     pub processing_fps: f64,
@@ -64,12 +64,12 @@ pub(crate) fn parse_options() -> Result<Options, String> {
     let mut model = PathBuf::from(DEFAULT_MODEL);
     let mut classes = None;
     let mut spatial_config = None;
-    let mut database_url = env::var("DATABASE_URL")
+    let mut dma_jaiva_url = env::var("DMA_JAIVA")
         .ok()
         .filter(|value| !value.trim().is_empty());
     let mut log_path = PathBuf::from(DEFAULT_LOG);
     let mut persistence = PersistenceConfig {
-        mode: PersistenceMode::Required,
+        mode: PersistenceMode::BestEffort,
         queue_capacity: DEFAULT_PERSISTENCE_QUEUE,
         batch_size: DEFAULT_PERSISTENCE_BATCH,
         flush_interval_ms: DEFAULT_PERSISTENCE_FLUSH_MS,
@@ -92,10 +92,14 @@ pub(crate) fn parse_options() -> Result<Options, String> {
             "--spatial-config" => {
                 spatial_config = Some(PathBuf::from(next_value(&mut args, "--spatial-config")?));
             }
-            "--database-url" => {
-                database_url = Some(next_value(&mut args, "--database-url")?);
+            "--dma-jaiva" => {
+                dma_jaiva_url = Some(next_value(&mut args, "--dma-jaiva")?);
             }
-            "--no-persistence" => database_url = None,
+            "--database-url" => {
+                // Alias legado: ahora es la base URL del ingest Jaiba (env DMA_JAIVA).
+                dma_jaiva_url = Some(next_value(&mut args, "--database-url")?);
+            }
+            "--no-persistence" => dma_jaiva_url = None,
             "--persistence-mode" => {
                 let value = next_value(&mut args, "--persistence-mode")?;
                 persistence.mode = match value.as_str() {
@@ -222,7 +226,7 @@ pub(crate) fn parse_options() -> Result<Options, String> {
         model,
         classes,
         spatial_config,
-        database_url,
+        dma_jaiva_url,
         persistence,
         log_path,
         processing_fps,
@@ -257,9 +261,9 @@ pub(crate) fn print_help() {
            --model RUTA            Modelo YOLO 11 ONNX\n\
            --classes RUTA          Una clase por línea (predeterminado: COCO)\n\
            --spatial-config RUTA   Geometría normalizada de la cámara\n\
-           --database-url URL      PostgreSQL (o variable DATABASE_URL)\n\
-           --no-persistence        Ejecutar sin guardar detecciones\n\
-           --persistence-mode MODO required | best-effort\n\
+           --dma-jaiva URL         Servidor Jaiba (o variable DMA_JAIVA)\n\
+           --no-persistence        Ejecutar sin entregar eventos a Jaiba\n\
+           --persistence-mode MODO required | best-effort (default: best-effort)\n\
            --persistence-queue N   Eventos máximos en espera (256)\n\
            --persistence-batch N   Detecciones por transacción (25)\n\
            --persistence-flush-ms N  Flush máximo en milisegundos (500)\n\

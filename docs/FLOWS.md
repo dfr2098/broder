@@ -9,7 +9,7 @@ se mencionan únicamente en la sección de alcance.
 Little Brother recibe video desde un archivo o una cámara RTSP, selecciona
 frames a una frecuencia configurable, detecta objetos con YOLO 11, conserva su
 identidad temporal, interpreta su posición dentro de una geometría de cámara y
-puede guardar las detecciones en PostgreSQL.
+puede guardar las detecciones en ClickHouse.
 
 Actualmente se persiste `VisionDetection`. Los tracks, los resultados
 espaciales, el video, las alarmas y las reglas industriales todavía no se
@@ -37,7 +37,7 @@ flowchart TD
     DET --> PERSIST{¿Persistencia habilitada?}
     PERSIST -->|Sí| QUEUE[Cola acotada]
     QUEUE --> WORKER[Worker de persistencia]
-    WORKER --> PG[(PostgreSQL)]
+    WORKER --> PG[(ClickHouse)]
     PERSIST -->|No| CONTINUE[Continuar sin guardar]
 
     OUTPUT --> NEXT{¿Finalizó el flujo?}
@@ -70,10 +70,10 @@ flowchart TD
     SMODEL --> CAMERA{¿camera_id coincide con source_id?}
     CAMERA -->|No| ERROR([Finalizar con error])
     CAMERA -->|Sí| DATABASE
-    SCFG -->|No| DATABASE{¿DATABASE_URL está configurada?}
+    SCFG -->|No| DATABASE{¿DMA_JAIVA está configurada?}
 
     DATABASE -->|Sí| PWORKER[Iniciar worker de persistencia]
-    PWORKER --> PSTATE{¿PostgreSQL está disponible?}
+    PWORKER --> PSTATE{¿ClickHouse está disponible?}
     PSTATE -->|Sí| READY[Persistencia conectada]
     PSTATE -->|No, best-effort| RETRY[Iniciar y reintentar conexión]
     PSTATE -->|No, required| ERROR
@@ -86,7 +86,7 @@ flowchart TD
     ENGINE --> STREAM[Iniciar procesamiento del flujo]
 ```
 
-La configuración espacial y la conexión a PostgreSQL son opcionales. El modelo
+La configuración espacial y la conexión a ClickHouse son opcionales. El modelo
 ONNX y la fuente de video sí son necesarios para procesar el flujo.
 
 ## 3. Procesamiento de cada frame
@@ -200,7 +200,7 @@ flowchart TD
     FLUSH -->|Sí| BUS[Publicar en InMemoryEventBus]
     BUS --> ROUTER[PersistenceRouter]
     ROUTER --> POLICY[Seleccionar dominio temporal]
-    POLICY --> WRITER[PostgresVisionDetectionWriter]
+    POLICY --> WRITER[JaibaVisionDetectionWriter]
     WRITER --> TX{¿Transacción correcta?}
     TX -->|Sí| COMMIT[Confirmar lote y actualizar métricas]
     TX -->|No| RECONNECT[Reconectar y reintentar una vez]
@@ -211,7 +211,7 @@ flowchart TD
 
 En modo `required`, la presión de la base de datos se transmite al productor
 para evitar pérdidas. En `best-effort`, la visión continúa aunque la cola esté
-llena o PostgreSQL no esté disponible, y las pérdidas se reflejan en métricas.
+llena o ClickHouse no esté disponible, y las pérdidas se reflejan en métricas.
 
 ## 7. Cierre controlado
 
@@ -233,7 +233,7 @@ flowchart TD
     SUMMARY --> END([Fin])
 ```
 
-Este cierre permite enviar el lote pendiente a PostgreSQL y dejar registrados
+Este cierre permite enviar el lote pendiente a ClickHouse y dejar registrados
 los tracks que seguían activos al terminar la fuente.
 
 ## Relación entre los resultados
@@ -296,7 +296,7 @@ flowchart TD
     FIX --> DOCTOR
     READY -->|Sí| SMOKE[Ejecutar make vision-smoke]
     SMOKE --> LOGS[Revisar detecciones, tracks y métricas]
-    LOGS --> QUERY{¿PostgreSQL está habilitado?}
+    LOGS --> QUERY{¿ClickHouse está habilitado?}
     QUERY -->|Sí| DB[Ejecutar make vision-query]
     QUERY -->|No| END([Prueba local terminada])
     DB --> END

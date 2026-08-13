@@ -108,49 +108,25 @@ PersistencePolicy
         ↓
 PersistenceDomain::Temporal
         ↓
-PostgresVisionDetectionWriter
+JaibaVisionDetectionWriter  →  POST DMA_JAIVA/api/v1/ingest/events
+        ↓
+Jaiba (buffer / hot path) → motores detrás de Jaiba
 ```
 
-`vision-core` no conoce el bus, PostgreSQL ni SQL. La composición ocurre en la
-aplicación `vision-inference` y el SQL permanece dentro del adaptador de
-infraestructura `persistence-postgres`.
+`vision-core` no conoce el bus, Jaiba, SQL ni ningún motor. La composición
+ocurre en `vision-inference` y el puente HTTP vive en `jaiba-bridge`.
 
-## Tabla temporal.vision_detection
+Broder **no** define ni migra tablas. El esquema histórico (p. ej. ClickHouse
+`temporal.vision_detection`) pertenece a Jaiba / al sink que el DAG elija.
+El lab KPI `DMA_JAIVA` es un circuito aparte.
 
-| Columna | Tipo | Descripción |
-|---|---|---|
-| `event_id` | `TEXT` PK | ID único por sesión y secuencia |
-| `event_type` | `TEXT` | `vision.detection.observed` |
-| `schema_version` | `SMALLINT` | Versión del contrato |
-| `occurred_at` | `TIMESTAMPTZ` | Tiempo real de publicación |
-| `observed_at` | `TIMESTAMPTZ` | Tiempo real de observación |
-| `source_id` | `TEXT` | Cámara lógica |
-| `correlation_id` | `TEXT` | Correlación opcional |
-| `detection_id` | `TEXT` | ID producido por visión |
-| `frame_id` | `BIGINT` | Frame de la fuente |
-| `source_timestamp_ms` | `BIGINT` | Posición temporal dentro del flujo |
-| `class_id` | `INTEGER` | Clase numérica del modelo |
-| `class_name` | `TEXT` | Nombre de clase |
-| `confidence` | `REAL` | Confianza entre 0 y 1 |
-| `bbox_x`, `bbox_y` | `REAL` | Origen normalizado |
-| `bbox_width`, `bbox_height` | `REAL` | Dimensiones normalizadas |
-| `persisted_at` | `TIMESTAMPTZ` | Tiempo de inserción PostgreSQL |
+## Entrega asíncrona
 
-Índices actuales:
-
-- `occurred_at DESC`;
-- `(source_id, occurred_at DESC)`;
-- `(class_id, occurred_at DESC)`.
-
-Las restricciones validan rangos, dimensiones, versión y valores no negativos.
-La migración se ejecuta automáticamente al conectar y usa operaciones
-idempotentes. Las inserciones usan una sentencia preparada dentro de una
-transacción por lotes y `ON CONFLICT (event_id) DO NOTHING`.
-
-Antes del adaptador existe una cola acotada. El worker hace flush al completar
-el lote, vencer el intervalo o cerrar el motor. Si una transacción falla, abre
-una conexión nueva y reintenta una vez. En modo `required` se aplica
-backpressure; en `best-effort` el análisis continúa y contabiliza las pérdidas.
+Antes del puente existe una cola acotada. El hilo de video solo hace
+`try_send` (fire-and-forget): nunca espera a Jaiba ni a un INSERT. El worker
+agrupa lotes, hace flush por tamaño/intervalo y reintenta el puente si Jaiba
+cae. `persisted` en métricas significa “aceptado por Jaiba (2xx)”, no
+“escrito en ClickHouse/Postgres”.
 
 ## Semántica de tiempos
 
@@ -158,7 +134,7 @@ Para no confundir la posición de un video con una fecha real:
 
 - `occurred_at` y `observed_at` usan el reloj Unix del SP;
 - `source_timestamp_ms` conserva la posición relativa del archivo o flujo;
-- `persisted_at` lo asigna PostgreSQL al insertar.
+- cualquier `persisted_at` lo asigna el motor detrás de Jaiba.
 
 ## Identificadores
 

@@ -8,8 +8,8 @@ crate separado para evitar que visión, correlación y topología queden acoplad
 - `crates/event-core`: contrato neutral del sobre y del bus de eventos.
 - `crates/persistence-core`: clasifica eventos y los dirige mediante puertos
   abstractos; no contiene SQL ni clientes de bases de datos.
-- `crates/persistence-postgres`: implementa el escritor temporal de
-  `VisionDetection`, su migración y las consultas preparadas para PostgreSQL.
+- `crates/jaiba-bridge`: entrega `EventEnvelope` a Jaiba (env `DMA_JAIVA` =
+  URL legado del ingest) sin drivers ni credenciales de base de datos.
 - `crates/transport-core`: modelo físico de transportadores y movimiento de
   objetos. No conoce cámaras, PLC, WMS ni reglas operativas.
 - `crates/vision-core`: entidad `VisionDetection`, cajas normalizadas, muestreo
@@ -34,7 +34,7 @@ Los futuros núcleos pueden agregarse como crates hermanos, por ejemplo:
 crates/
 ├── event-core
 ├── persistence-core
-├── persistence-postgres
+├── jaiba-bridge
 ├── transport-core
 ├── vision-core
 ├── tracking-core
@@ -75,10 +75,9 @@ crates/spatial-core/
 ├── src/error.rs        errores del núcleo
 └── tests/spatial.rs    pruebas geométricas
 
-crates/persistence-postgres/
-├── src/lib.rs                  fachada del adaptador
-├── src/vision_detection.rs     escritor PostgreSQL tipado
-└── migrations/0001_...sql     esquema temporal e índices
+crates/jaiba-bridge/
+├── src/lib.rs                  fachada del puente
+└── src/vision_detection.rs     cliente HTTP ingest → Jaiba
 
 apps/vision-inference/src/
 ├── main.rs             composición del proceso
@@ -131,6 +130,7 @@ cargo build --release --workspace
 ./target/release/transport-simulator
 ```
 
-PostgreSQL y los futuros motores de persistencia se ejecutan aparte mediante
-Docker Compose. Los adaptadores reciben sus direcciones mediante configuración;
-el dominio no conoce si la base de datos está en un contenedor.
+Jaiba es externo. ClickHouse/PostgreSQL en Docker Compose son sinks opcionales
+para Jaiba, no dependencias obligatorias de Broder. El lab KPI `DMA_JAIVA` es
+un circuito aparte. Los adaptadores reciben direcciones por configuración; el
+dominio no conoce si un sink está en un contenedor.
