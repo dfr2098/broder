@@ -1,7 +1,8 @@
 //! Enrutamiento de persistencia sin dependencias de motores de base de datos.
 //!
-//! Broder entrega eventos a Jaiba (`jaiba-bridge`). Detrás de Jaiba solo
-//! ClickHouse (histórico) y PostgreSQL (configuración / estado).
+//! Broder entrega eventos a Jaiba (`jaiba-bridge`). Los sinks detrás de Jaiba
+//! son opcionales vía DAG; recomendados: ClickHouse (histórico) y PostgreSQL
+//! (config). Broder no habla con DB directamente y puede vivir sin ellas.
 
 use std::error::Error;
 use std::fmt::{self, Display};

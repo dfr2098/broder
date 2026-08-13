@@ -99,7 +99,7 @@ vision-logs:
 	tail -n 100 -F "$(VISION_LOG)"
 
 vision-query:
-	@echo "Histórico (ClickHouse local; Jaiba es quien escribe en planta):"
+	@echo "Histórico opcional (ClickHouse local; Jaiba escribe si el DAG lo pide):"
 	curl -sS "http://127.0.0.1:$${CLICKHOUSE_HTTP_PORT:-8123}/?database=$${CLICKHOUSE_DATABASE:-temporal}" \
 		--user "$${CLICKHOUSE_USER:-default}:$${CLICKHOUSE_PASSWORD:-}" \
 		--data-binary "SELECT * FROM temporal.vision_detection ORDER BY occurred_at DESC LIMIT 20 FORMAT PrettyCompact"
@@ -120,6 +120,7 @@ web-down:
 web-logs:
 	docker compose logs -f web
 
+# ClickHouse + Postgres opcionales para sinks de Jaiba (no requeridos por Broder).
 infra-up:
 	docker compose up -d clickhouse db
 

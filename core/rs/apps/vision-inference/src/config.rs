@@ -96,7 +96,7 @@ pub(crate) fn parse_options() -> Result<Options, String> {
                 dma_jaiva_url = Some(next_value(&mut args, "--dma-jaiva")?);
             }
             "--database-url" => {
-                // Alias legado: ahora es la base URL de Jaiba (DMA_JAIVA).
+                // Alias legado: ahora es la base URL del ingest Jaiba (env DMA_JAIVA).
                 dma_jaiva_url = Some(next_value(&mut args, "--database-url")?);
             }
             "--no-persistence" => dma_jaiva_url = None,

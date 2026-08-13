@@ -8,8 +8,8 @@ crate separado para evitar que visión, correlación y topología queden acoplad
 - `crates/event-core`: contrato neutral del sobre y del bus de eventos.
 - `crates/persistence-core`: clasifica eventos y los dirige mediante puertos
   abstractos; no contiene SQL ni clientes de bases de datos.
-- `crates/jaiba-bridge`: entrega `EventEnvelope` a Jaiba (`DMA_JAIVA`) sin
-  drivers ni credenciales de base de datos.
+- `crates/jaiba-bridge`: entrega `EventEnvelope` a Jaiba (env `DMA_JAIVA` =
+  URL legado del ingest) sin drivers ni credenciales de base de datos.
 - `crates/transport-core`: modelo físico de transportadores y movimiento de
   objetos. No conoce cámaras, PLC, WMS ni reglas operativas.
 - `crates/vision-core`: entidad `VisionDetection`, cajas normalizadas, muestreo
@@ -130,6 +130,7 @@ cargo build --release --workspace
 ./target/release/transport-simulator
 ```
 
-Jaiba (lab DMA_JAIVA) y los motores detrás de Jaiba se ejecutan aparte mediante
-Docker Compose. Los adaptadores reciben sus direcciones mediante configuración;
-el dominio no conoce si la base de datos está en un contenedor.
+Jaiba es externo. ClickHouse/PostgreSQL en Docker Compose son sinks opcionales
+para Jaiba, no dependencias obligatorias de Broder. El lab KPI `DMA_JAIVA` es
+un circuito aparte. Los adaptadores reciben direcciones por configuración; el
+dominio no conoce si un sink está en un contenedor.

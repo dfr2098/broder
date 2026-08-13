@@ -1,28 +1,43 @@
-# Arquitectura Broder ↔ Jaiba (lab DMA_JAIVA)
+# Arquitectura Broder ↔ Jaiba
 
 Regla de Broder: **no conoce drivers, credenciales ni particularidades de DB**.
-
-Destinos detrás de Jaiba (solo estos dos):
+Broder puede vivir **sin DB** y sin lab DMA: solo produce eventos.
 
 ```text
-BRODER
-   │  EventEnvelope (fire-and-forget)
-   ▼
-JAIBA  (DMA_JAIVA)
-   │
-   ├─ Hot path / buffer en memoria
-   ├─ Histórico ──────────► ClickHouse
-   └─ Config / estado ────► PostgreSQL
+BRODER ──► JAIBA ──┬──► LLM (opcional)
+                   ├──► ClickHouse (histórico, si se persiste)
+                   ├──► PostgreSQL / Oracle / Odoo-WMS (sinks opcionales)
+                   └──► alertas / drop (si no es relevante)
 ```
 
-No se envía nada a Oracle ni a otras bases.
+Jaiba (OSS, DAG YAML) decide persistir / analizar / ignorar / drop. Broder
+nunca habla con bases de datos directamente.
 
-Infra local de Broder (`make infra-up`): contenedores **ClickHouse** + **PostgreSQL**
-para que Jaiba los use. Broder sigue sin abrir drivers: solo habla con `DMA_JAIVA`.
+## Distinción: Jaiba vs DMA_JAIVA
+
+| Pieza | Rol en este camino |
+| --- | --- |
+| **Jaiba** | Motor de conectividad/enrutamiento que recibe `EventEnvelope` de Broder. |
+| **DMA_JAIVA** | Lab KPI aparte (`Oracle → Jaiba → Postgres DMA`). **No** es el camino Broder ni el esqueleto de Broder. |
+| **Broder** | Productor fire-and-forget. Env var histórica `DMA_JAIVA` = URL base del *ingest Jaiba* (nombre legado; no implica el lab DMA). |
+
+Ver [`docs/BRIEF_DMA_JAIVA_JAIBA_BRODER.md`](../../docs/BRIEF_DMA_JAIVA_JAIBA_BRODER.md).
+
+## Sinks recomendados (opcionales)
+
+ClickHouse (histórico) y PostgreSQL (config/estado) son los sinks **recomendados**
+cuando hace falta persistir. Otros destinos (Oracle, Odoo-WMS, LLM, alertas,
+drop) son opcionales vía DAG de Jaiba — Broder no los fuerza ni los conoce.
+
+Infra local opcional (`make infra-up`): contenedores **ClickHouse** + **PostgreSQL**
+para que *Jaiba* los use como sinks de laboratorio. No son el runtime skeleton
+de Broder: visión/app funcionan sin ellos y sin ingest.
 
 ## Contrato HTTP (Broder → Jaiba)
 
 `POST {DMA_JAIVA}/api/v1/ingest/events`
+
+(`DMA_JAIVA` aquí es solo el nombre de la variable de entorno = base URL de Jaiba.)
 
 ```json
 {
@@ -56,21 +71,22 @@ para que Jaiba los use. Broder sigue sin abrir drivers: solo habla con `DMA_JAIV
 ```
 
 Respuesta esperada: **202 Accepted** (o 2xx). Eso significa “Jaiba bufferizó”.
-**No** significa “ya está en ClickHouse/Postgres”.
+**No** significa “ya está en ClickHouse/Postgres u otro sink”.
 
 ## Variables en Broder
 
 | Variable | Rol |
 | --- | --- |
-| `DMA_JAIVA` | Base URL del servidor Jaiba |
+| `DMA_JAIVA` | Base URL del ingest Jaiba (nombre legado) |
 | `JAIBA_TOKEN` | Bearer opcional |
 | `JAIBA_INGEST_PATH` | Default `/api/v1/ingest/events` |
 | `JAIBA_TIMEOUT_MS` | Timeout HTTP del puente (default 2000) |
 
-## Roles de cada DB (detrás de Jaiba)
+## Roles típicos detrás de Jaiba
 
-| Camino | Motor | Por qué |
+| Camino | Destino típico | Notas |
 | --- | --- | --- |
 | Hot | Memoria (Broder/Jaiba) | No congelar inferencia |
-| Histórico de detecciones | **ClickHouse** | Append-only, time-series, agregaciones |
-| Config / operacional | **PostgreSQL** | Estado mutable, relaciones |
+| Histórico | **ClickHouse** (recomendado) | Append-only / time-series cuando se persiste |
+| Config / operacional | **PostgreSQL** (recomendado) | Estado mutable si el DAG lo pide |
+| Otros | Oracle / Odoo-WMS / LLM / alertas / drop | Opcionales vía DAG; Broder no los abre |

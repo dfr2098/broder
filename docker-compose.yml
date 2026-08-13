@@ -1,3 +1,6 @@
+# Infra opcional para sinks de Jaiba (no es el esqueleto runtime de Broder).
+# ClickHouse / PostgreSQL los consume Jaiba si el DAG persiste; visión/app
+# funcionan sin estos servicios. DMA_JAIVA (lab KPI) es un circuito aparte.
 name: little-brother
 
 services:

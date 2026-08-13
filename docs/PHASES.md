@@ -142,7 +142,7 @@ Antes de implementar alarmas conviene cerrar, en este orden:
 1. calibración de una cámara fija y correspondencia píxel–metro;
 2. modelo YOLO entrenado y validado con pallets/cajas reales;
 3. persistencia de `VisionTrack` y `SpatialTrack` como eventos separados;
-4. bus asíncrono con cola limitada y escritura ClickHouse vía Jaiva por lotes;
+4. bus asíncrono con cola limitada y escritura ClickHouse vía Jaiba por lotes;
 5. cálculo de velocidad y dirección con tolerancias configurables;
 6. reglas de desalineación y permanencia;
 7. correlación con telegramas;

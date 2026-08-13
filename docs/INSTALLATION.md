@@ -10,9 +10,11 @@ SP / equipo de planta
 ├── OpenCV instalado localmente
 ├── modelo YOLO ONNX almacenado localmente
 └── Docker o Podman
-    └── visualizador Nginx 1.30.4
+    ├── visualizador Nginx 1.30.4
+    └── (opcional) ClickHouse + PostgreSQL como sinks para Jaiba
 
-Jaiba / bases de datos viven fuera de Broder (lab DMA_JAIVA).
+Jaiba (ingest) es externo. Las DB no son obligatorias para Broder.
+El lab KPI DMA_JAIVA es un circuito aparte (no este camino).
 ```
 
 El motor de visión no se ejecuta dentro de un contenedor. Esto permite acceso
@@ -142,9 +144,9 @@ JAIBA_TOKEN=
 JAIBA_INGEST_PATH=/api/v1/ingest/events
 ```
 
-`DMA_JAIVA` es la URL del servidor Jaiba del lab `DMA_JAIVA`. Broder no
-conoce drivers ni credenciales de bases de datos. El archivo `.env` no debe
-versionarse.
+`DMA_JAIVA` es la URL base del ingest Jaiba (nombre de variable legado). No
+implica el lab KPI `DMA_JAIVA`. Broder no conoce drivers ni credenciales de
+bases de datos. El archivo `.env` no debe versionarse.
 
 ## Instalar el modelo YOLO
 
@@ -166,7 +168,10 @@ El checksum aprobado está documentado en
 usa clases COCO: permite comprobar el flujo técnico, pero no sustituye un
 modelo entrenado para pallets o cajas de la planta.
 
-## Conectar Jaiba
+## Conectar Jaiba (opcional)
+
+`make infra-up` levanta ClickHouse + PostgreSQL como **sinks opcionales** para
+que Jaiba pueda persistir en lab local. Broder / visión funcionan sin ellos.
 
 ```bash
 make infra-up
@@ -176,7 +181,7 @@ docker compose ps
 ClickHouse sólo publica el puerto en `127.0.0.1`; no queda expuesto directamente
 a la red de planta.
 
-Si `8123` está ocupado:
+Si el ingest Jaiba usa otro host/puerto:
 
 ```bash
 export DMA_JAIVA=http://127.0.0.1:19090

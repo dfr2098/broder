@@ -2,8 +2,12 @@
 
 Little Brother es una plataforma de observabilidad industrial. El prototipo
 actual cubre el modelo físico de transportadores, inferencia YOLO, tracking,
-interpretación espacial y entrega fire-and-forget de detecciones a Jaiba (`DMA_JAIVA`); las DB viven detrás de Jaiba.
+interpretación espacial y entrega fire-and-forget de detecciones a **Jaiba**;
+las DB son sinks opcionales detrás de Jaiba, no del runtime de Broder.
 Permanece independiente de PLC, WMS y fabricantes específicos.
+
+Alcance de conectividad: ver [`docs/BRIEF_DMA_JAIVA_JAIBA_BRODER.md`](docs/BRIEF_DMA_JAIVA_JAIBA_BRODER.md)
+(Jaiba ≠ lab DMA_JAIVA ≠ Broder).
 
 ## Documentación
 
@@ -30,13 +34,15 @@ core/rs/apps/transport-simulator Simulador local
 core/rs/apps/video-viewer        Visor provisional de videos
 core/rs/apps/vision-inference    Motor YOLO 11 con OpenCV DNN
 core/yolo/models                 Modelos ONNX locales
-docker-compose.yml               Visualizador Nginx (sin bases de datos)
+docker-compose.yml               Nginx + sinks opcionales CH/PG para Jaiba
 ```
 
 Los procesos Rust se ejecutan directamente en el SP o equipo de planta.
-El visualizador Nginx corre en contenedor. Jaiba (lab `DMA_JAIVA`) es externo:
-Broder solo le entrega `EventEnvelope`. El panel recibe WebSockets vía proxy
-hacia `vision-inference`. Los núcleos no conocen SQL, drivers ni Nginx.
+El visualizador Nginx corre en contenedor. ClickHouse/PostgreSQL en Compose
+son **opcionales** (sinks para Jaiba vía DAG). Broder solo entrega
+`EventEnvelope` al ingest Jaiba (env `DMA_JAIVA` = URL legado). El lab KPI
+`DMA_JAIVA` es un circuito aparte. El panel recibe WebSockets vía proxy hacia
+`vision-inference`. Los núcleos no conocen SQL, drivers ni Nginx.
 
 ## Comprobar el proyecto
 
@@ -204,12 +210,12 @@ make release
 
 ## Fase 5: puente Jaiba (fire-and-forget)
 
-Crear la configuración local e iniciar ClickHouse (o apuntar `DMA_JAIVA` al
-gateway Jaiva del lab):
+Opcional: levantar sinks locales para que Jaiba pueda persistir, o apuntar
+`DMA_JAIVA` (env legado) al ingest Jaiba:
 
 ```bash
 cp .env.example .env
-make infra-up
+make infra-up   # CH + PG opcionales; Broder no los requiere para correr
 ```
 
 `make vision`, `make vision-headless` y `make vision-smoke` leen
@@ -226,7 +232,8 @@ Por defecto el modo es `best-effort`. Si Jaiba no está disponible:
 make vision PERSISTENCE_MODE=best-effort
 ```
 
-Broder no consulta bases de datos. El histórico se lee desde Jaiba/DMA_JAIVA.
+Broder no consulta bases de datos. El histórico, si existe, se lee desde el
+sink que Jaiba haya escrito (p. ej. ClickHouse local vía `make vision-query`).
 
 ```bash
 make vision-query
@@ -234,7 +241,7 @@ make vision-query
 
 Para ejecutar sin entregar eventos a Jaiba: `--no-persistence`.
 
-Detenerla sin eliminar sus datos:
+Detener sinks opcionales sin eliminar sus datos:
 
 ```bash
 make infra-down

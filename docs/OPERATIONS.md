@@ -20,7 +20,7 @@ Todos los comandos de esta guía se ejecutan desde la raíz del repositorio.
 | `TRACK_MAX_LOST_MS` | `1500` | Tiempo máximo sin observación |
 | `TRACK_MIN_IOU` | `0.05` | IoU mínima de asociación |
 | `TRACK_MAX_DISTANCE` | `0.25` | Distancia normalizada máxima |
-| `DMA_JAIVA` | `http://127.0.0.1:19090` | Servidor Jaiba (lab DMA_JAIVA) |
+| `DMA_JAIVA` | `http://127.0.0.1:19090` | URL base del ingest Jaiba (env legado; ≠ lab KPI DMA) |
 | `JAIBA_TOKEN` | vacío | Bearer opcional para el ingest |
 | `PERSISTENCE_MODE` | `required` | `required` o `best-effort` |
 | `PERSISTENCE_QUEUE` | `256` | Eventos máximos esperando al worker |
@@ -33,7 +33,10 @@ Las variables pueden pasarse a `make` sin modificar archivos:
 make vision FPS=5 CONFIDENCE=0.40 SOURCE_ID=cam-entrada
 ```
 
-## Infraestructura (sin DB en Broder)
+## Infraestructura opcional (sinks Jaiba; Broder sin DB obligatoria)
+
+`make infra-up` levanta ClickHouse + PostgreSQL para que Jaiba los use como
+sinks de laboratorio. No son el runtime skeleton de Broder.
 
 Iniciar, inspeccionar logs y detener:
 
@@ -475,7 +478,8 @@ docker compose ps
 make infra-logs
 ```
 
-Confirme que `DMA_JAIVA` apunta al servidor Jaiba del lab y que el ingest responde 2xx.
+Confirme que `DMA_JAIVA` apunta al ingest Jaiba y que responde 2xx.
+ClickHouse local (`make infra-up`) solo importa si el DAG de Jaiba escribe ahí.
 
 ### YOLO identifica una clase incorrecta
 

@@ -37,7 +37,7 @@ impl JaibaBridgeConfig {
     }
 }
 
-/// Interpreta `DMA_JAIVA` como base URL del servidor Jaiba (lab DMA_JAIVA).
+/// Interpreta `DMA_JAIVA` como base URL del ingest Jaiba (nombre de env legado).
 pub fn parse_dma_jaiva_url(raw: &str) -> Result<JaibaBridgeConfig, PersistenceError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {

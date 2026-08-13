@@ -17,6 +17,8 @@ marcadas como futuras no forman parte del ejecutable actual.
   funcionalidades pendientes.
 - [Arquitectura Rust](../core/rs/ARCHITECTURE.md): límites entre crates,
   diagramas de flujo y estrategia de persistencia.
+- [Brief Jaiba / DMA_JAIVA / Broder](BRIEF_DMA_JAIVA_JAIBA_BRODER.md): roles,
+  sinks opcionales y límites de alcance.
 - [Organización del workspace](../core/rs/README.md): árbol de módulos y
   responsabilidades de cada archivo.
 - [Modelo YOLO local](../core/yolo/models/README.md): ubicación y checksum del
@@ -34,19 +36,21 @@ flowchart TD
     TRACK --> SPATIAL[Modelo espacial]
     DET --> EVENT[EventEnvelope]
     EVENT --> BUS[Bus y PersistenceRouter]
-    BUS --> JB[(Jaiba / DMA_JAIVA)]
+    BUS --> JB[(Jaiba ingest)]
 ```
 
 La explicación paso a paso y los flujos alternativos están en
 [Diagramas de flujo](FLOWS.md).
 
-El proceso Rust se ejecuta directamente en el SP. Jaiba (externo) y el visualizador
-web Nginx se ejecutan en contenedores separados.
+El proceso Rust se ejecuta directamente en el SP. Jaiba es externo. ClickHouse
+y PostgreSQL en Compose son sinks opcionales para Jaiba; el visualizador Nginx
+también corre en contenedor. Broder no requiere DB para funcionar.
 
 ## Inicio rápido
 
 ```bash
 cp .env.example .env
+# opcional: sinks CH/PG para Jaiba — Broder corre sin ellos
 make infra-up
 make doctor
 make check
@@ -60,7 +64,7 @@ Para abrir la visualización:
 make vision
 ```
 
-Si Jaiba escucha en otro host/puerto:
+Si el ingest Jaiba escucha en otro host/puerto (env legado `DMA_JAIVA`):
 
 ```bash
 export DMA_JAIVA=http://127.0.0.1:19090
@@ -73,9 +77,10 @@ Cuando la documentación y el código difieran, estas son las fuentes de verdad:
 
 | Tema | Archivo |
 |---|---|
+| Roles Jaiba / DMA lab / Broder | [`BRIEF_DMA_JAIVA_JAIBA_BRODER.md`](BRIEF_DMA_JAIVA_JAIBA_BRODER.md) |
 | Comandos y valores predeterminados | [`Makefile`](../Makefile) |
 | Opciones del motor | [`config.rs`](../core/rs/apps/vision-inference/src/config.rs) |
 | Geometría DEMO | [`camera-1.spatial`](../core/vision/config/camera-1.spatial) |
 | Contrato Jaiba | [`examples/jaiva/README.md`](../examples/jaiva/README.md) |
 | Dependencias Rust | [`Cargo.lock`](../core/rs/Cargo.lock) |
-| Visualizador Nginx | [`docker-compose.yml`](../docker-compose.yml) |
+| Compose (Nginx + sinks opcionales) | [`docker-compose.yml`](../docker-compose.yml) |

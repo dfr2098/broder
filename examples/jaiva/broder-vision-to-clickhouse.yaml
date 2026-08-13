@@ -1,16 +1,18 @@
-# Flow de referencia para DMA_JAIVA.
+# Flow de referencia para Jaiba (OSS), no para Broder.
 # Broder NO ejecuta este YAML: solo POSTea EventEnvelope al ingest.
-# Jaiba recibe, bufferiza y persiste solo a:
+#
+# Sinks recomendados cuando se persiste:
 #   - ClickHouse  → histórico de visión
 #   - PostgreSQL  → configuración / estado
-# No hay Oracle ni otros destinos.
+# Otros sinks (Oracle, Odoo-WMS, LLM, alertas, drop) son opcionales vía DAG.
+# DMA_JAIVA (lab KPI) es un circuito aparte; no confundir con este camino Broder.
 
 id: broder-vision-ingest
 
-# El endpoint /api/v1/ingest/events (lab DMA_JAIVA) debe:
+# El endpoint /api/v1/ingest/events (Jaiba) debe:
 #   1. aceptar el JSON de broder con 202 Accepted
 #   2. encolar paquetes sin bloquear al productor
-#   3. escribir histórico en ClickHouse y config/estado en PostgreSQL
+#   3. enrutar según el DAG (p. ej. histórico→ClickHouse, config→PostgreSQL)
 
 database_connections:
   vision_history:

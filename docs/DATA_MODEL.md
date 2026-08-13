@@ -117,7 +117,8 @@ Jaiba (buffer / hot path) → motores detrás de Jaiba
 ocurre en `vision-inference` y el puente HTTP vive en `jaiba-bridge`.
 
 Broder **no** define ni migra tablas. El esquema histórico (p. ej. ClickHouse
-`temporal.vision_detection`) pertenece a Jaiba / DMA_JAIVA.
+`temporal.vision_detection`) pertenece a Jaiba / al sink que el DAG elija.
+El lab KPI `DMA_JAIVA` es un circuito aparte.
 
 ## Entrega asíncrona
 
